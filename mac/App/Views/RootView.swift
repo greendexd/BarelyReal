@@ -34,11 +34,9 @@ struct RootView: View {
     @ObservedObject var store: BarelyRealStore
 
     @AppStorage("connection.peerHost") private var peerHost = "192.168.0.102"
+    @AppStorage("connection.controlPort") private var controlPort = 24_800
     @AppStorage("connection.kmPort") private var kmPort = 24_801
     @AppStorage("connection.clipboardPort") private var clipboardPort = 24_802
-    @AppStorage("connection.peerSide") private var peerSideRaw = PeerSide.left.rawValue
-    @AppStorage("connection.peerWidth") private var peerWidth = 1_920
-    @AppStorage("connection.peerHeight") private var peerHeight = 1_080
     @AppStorage("connection.scrollSpeed") private var scrollSpeed = 7
     @AppStorage("connection.mode") private var modeRaw = MacKmMode.sendToWindows.rawValue
     @AppStorage("connection.lockOnDisconnect") private var lockOnDisconnect = false
@@ -105,9 +103,6 @@ struct RootView: View {
             DevicesView(
                 store: store,
                 peerHost: $peerHost,
-                peerWidth: $peerWidth,
-                peerHeight: $peerHeight,
-                peerSideRaw: $peerSideRaw,
                 peerMac: $peerMac,
                 peerBroadcast: $peerBroadcast
             )
@@ -118,6 +113,7 @@ struct RootView: View {
         case .settings:
             SettingsView(
                 store: store,
+                controlPort: $controlPort,
                 kmPort: $kmPort,
                 clipboardPort: $clipboardPort,
                 scrollSpeed: $scrollSpeed,
@@ -164,11 +160,9 @@ struct RootView: View {
     private var currentSettings: ConnectionSettings {
         ConnectionSettings(
             peerHost: peerHost.trimmingCharacters(in: .whitespacesAndNewlines),
+            controlPort: controlPort,
             kmPort: kmPort,
             clipboardPort: clipboardPort,
-            peerSide: PeerSide(rawValue: peerSideRaw) ?? .left,
-            peerWidth: peerWidth,
-            peerHeight: peerHeight,
             scrollSpeed: min(max(scrollSpeed, 1), 20),
             mode: MacKmMode(rawValue: modeRaw) ?? .sendToWindows
         )

@@ -308,6 +308,53 @@ enum ProtocolEncodingTests {
             try expect(engine.screen(at: 5000, 5000) == nil, "expected nil at (5000,5000)")
         }
 
+        r.run("screenAnnouncementJsonRoundTrip") {
+            let announcement = ScreenAnnouncement(
+                peerId: "mac",
+                screens: [
+                    AnnouncedScreen(id: 1, x: -2560, y: 0, w: 2560, h: 1440, scale: 2.0, primary: true),
+                    AnnouncedScreen(id: 2, x: 0, y: 160, w: 1728, h: 1117, scale: 2.0, primary: false),
+                ]
+            )
+
+            let data = try JSONEncoder().encode(announcement)
+            let json = String(data: data, encoding: .utf8) ?? ""
+            try expect(json.contains(#""peer_id":"mac""#), "ScreenAnnounce must use peer_id wire key")
+            try expect(json.contains(#""screens""#), "ScreenAnnounce must include screens")
+
+            let decoded = try JSONDecoder().decode(ScreenAnnouncement.self, from: data)
+            try expectEqual(decoded, announcement)
+        }
+
+        r.run("layoutSyncUsesWireKeys") {
+            let sync = LayoutSyncMessage(layout: [
+                ScreenRect(peerId: "windows", screenId: 7, x: -1920, y: 480, width: 1920, height: 1080),
+            ])
+
+            let data = try JSONEncoder().encode(sync)
+            let json = String(data: data, encoding: .utf8) ?? ""
+            try expect(json.contains(#""peer_id":"windows""#), "LayoutSync must use peer_id wire key")
+            try expect(json.contains(#""screen_id":7"#), "LayoutSync must use screen_id wire key")
+            try expect(json.contains(#""w":1920"#), "LayoutSync must use compact width key")
+            try expect(json.contains(#""h":1080"#), "LayoutSync must use compact height key")
+
+            let decoded = try JSONDecoder().decode(LayoutSyncMessage.self, from: data)
+            try expectEqual(decoded, sync)
+        }
+
+        r.run("layoutTranslatedMovesOnlyPeerGroup") {
+            let macMain = ScreenRect(peerId: "mac", screenId: 1, x: 0, y: 0, width: 2560, height: 1440)
+            let macExternal = ScreenRect(peerId: "mac", screenId: 2, x: -1920, y: 0, width: 1920, height: 1080)
+            let win = ScreenRect(peerId: "windows", screenId: 1, x: 2560, y: 240, width: 1920, height: 1080)
+            let moved = Layout(screens: [macMain, macExternal, win]).translated(peerId: "windows", dx: -5120, dy: 400)
+
+            try expectEqual(moved.screens(peerId: "mac"), [macMain, macExternal])
+            try expectEqual(moved.screens(peerId: "windows"), [
+                ScreenRect(peerId: "windows", screenId: 1, x: -2560, y: 640, width: 1920, height: 1080),
+            ])
+            try expectEqual(moved.bounds(peerId: "mac"), ScreenRectBounds(minX: -1920, minY: 0, maxX: 2560, maxY: 1440))
+        }
+
         r.run("displayEnumeratorReturnsLocalLayout") {
             let layout = DisplayEnumerator.localLayout(peerId: "test-mac")
             try expect(!layout.screens.isEmpty, "expected at least one local screen")

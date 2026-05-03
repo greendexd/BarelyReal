@@ -25,6 +25,9 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
 install -m 755 "$BARELYREAL_BIN" "$APP_DIR/Contents/MacOS/BarelyReal"
+if [[ -f "$MAC_DIR/App/Resources/BarelyRealIcon.icns" ]]; then
+  install -m 644 "$MAC_DIR/App/Resources/BarelyRealIcon.icns" "$APP_DIR/Contents/Resources/BarelyRealIcon.icns"
+fi
 
 cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -43,6 +46,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
   <string>6.0</string>
   <key>CFBundleName</key>
   <string>BarelyReal</string>
+  <key>CFBundleIconFile</key>
+  <string>BarelyRealIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

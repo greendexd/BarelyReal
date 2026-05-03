@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var store: BarelyRealStore
 
+    @Binding var controlPort: Int
     @Binding var kmPort: Int
     @Binding var clipboardPort: Int
     @Binding var scrollSpeed: Int
@@ -20,6 +21,11 @@ struct SettingsView: View {
                 }
 
                 section(title: "Network", icon: "network") {
+                    settingRow("Control port") {
+                        TextField("24800", value: $controlPort, format: .number)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 110)
+                    }
                     settingRow("Keyboard & mouse port") {
                         TextField("24801", value: $kmPort, format: .number)
                             .textFieldStyle(.roundedBorder)

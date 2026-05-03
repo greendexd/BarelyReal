@@ -1,226 +1,186 @@
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using BarelyReal.Core.Layout;
 
 namespace BarelyReal.App.Controls;
 
-/// Visual layout designer mirroring mac/App/Views/Components/LayoutCanvas.swift.
-///
-/// Renders this Windows PC as a fixed center rectangle and the Mac peer as a draggable
-/// rectangle. Snaps to .Left or .Right when dropped. The host wires `SideChanged` to its
-/// state.
 public partial class LayoutCanvas : UserControl
 {
-    public enum Side { Left, Right }
+    public event Action<int, int, bool>? RemoteMoved;
 
-    public event Action<Side>? SideChanged;
-
-    public Side PeerSide
-    {
-        get => _peerSide;
-        set
-        {
-            if (_peerSide == value) return;
-            _peerSide = value;
-            Layout();
-        }
-    }
-
-    public int MacWidth { get => _macWidth; set { _macWidth = Math.Max(value, 320); Layout(); } }
-    public int MacHeight { get => _macHeight; set { _macHeight = Math.Max(value, 200); Layout(); } }
-
-    private Side _peerSide = Side.Left;
-    private int _macWidth = 2560;
-    private int _macHeight = 1600;
-
-    private Border? _winChip;
-    private Border? _macChip;
+    private Layout _layout = new();
+    private string _localPeerId = "windows";
+    private string _remotePeerId = "mac";
+    private bool _remoteIsStale;
     private bool _dragging;
     private Point _dragOrigin;
-    private double _macStartLeft;
+    private double _dragX;
+    private double _dragY;
+    private double _scale = 1;
 
     public LayoutCanvas()
     {
         InitializeComponent();
-        Loaded += (_, _) => Layout();
+        Loaded += (_, _) => Render();
     }
 
-    public void Refresh(int winWidth, int winHeight, int macWidth, int macHeight, Side side)
+    public void Refresh(Layout layout, string localPeerId, string remotePeerId, bool remoteIsStale)
     {
-        _macWidth = Math.Max(macWidth, 320);
-        _macHeight = Math.Max(macHeight, 200);
-        _peerSide = side;
-        // Win width/height come from system metrics; we re-layout regardless of size of stage.
-        _windowsWidth = Math.Max(winWidth, 320);
-        _windowsHeight = Math.Max(winHeight, 200);
-        Layout();
+        _layout = layout;
+        _localPeerId = localPeerId;
+        _remotePeerId = remotePeerId;
+        _remoteIsStale = remoteIsStale;
+        Render();
     }
 
-    private int _windowsWidth = 1920;
-    private int _windowsHeight = 1080;
+    private void Stage_SizeChanged(object sender, SizeChangedEventArgs e) => Render();
 
-    private void Stage_SizeChanged(object sender, SizeChangedEventArgs e) => Layout();
-
-    private void Layout()
+    private void Render()
     {
         if (StageCanvas is null) return;
-
         StageCanvas.Children.Clear();
         var canvasW = Math.Max(StageCanvas.ActualWidth, 100);
         var canvasH = Math.Max(StageCanvas.ActualHeight, 100);
 
-        // Floor line
-        var floor = new Rectangle
+        DrawGrid(canvasW, canvasH);
+
+        var bounds = PaddedBounds(_layout.Bounds());
+        _scale = Math.Min((canvasW - 44) / Math.Max(bounds.Width, 1), (canvasH - 44) / Math.Max(bounds.Height, 1));
+
+        foreach (var screen in _layout.ScreensFor(_localPeerId))
+            DrawScreen(screen, bounds, "This PC", "#0067C0", "🖥", false);
+
+        foreach (var screen in _layout.ScreensFor(_remotePeerId))
+            DrawScreen(
+                screen with
+                {
+                    X = screen.X + (int)Math.Round(_dragX / Math.Max(_scale, 0.001)),
+                    Y = screen.Y + (int)Math.Round(_dragY / Math.Max(_scale, 0.001))
+                },
+                bounds,
+                "Mac",
+                _remoteIsStale ? "#C19C00" : "#7B61FF",
+                "💻",
+                true);
+
+        if (_layout.ScreensFor(_remotePeerId).Count == 0)
+            DrawEmptyState(canvasW, canvasH);
+    }
+
+    private void DrawScreen(ScreenRect screen, ScreenRectBounds bounds, string title, string accentHex, string glyph, bool draggable)
+    {
+        var chip = MakeChip($"{title} {screen.ScreenId}", $"{screen.Width}×{screen.Height}  {screen.X},{screen.Y}", accentHex, glyph);
+        chip.Width = screen.Width * _scale;
+        chip.Height = screen.Height * _scale;
+        Canvas.SetLeft(chip, 22 + (screen.X - bounds.MinX) * _scale);
+        Canvas.SetTop(chip, 22 + (screen.Y - bounds.MinY) * _scale);
+        if (draggable)
         {
-            Height = 1,
-            Width = canvasW - 28,
-            Fill = new SolidColorBrush(Color.FromArgb(0x33, 0x00, 0x00, 0x00))
-        };
-        Canvas.SetLeft(floor, 14);
-        Canvas.SetTop(floor, canvasH - 24);
-        StageCanvas.Children.Add(floor);
-
-        // Compute scale so both screens fit horizontally with a small gap.
-        var totalPixels = (double)_windowsWidth + _macWidth;
-        var widthScale = (canvasW - 60) / totalPixels;
-        var heightScale = (canvasH - 50) / Math.Max(_windowsHeight, _macHeight);
-        var scale = Math.Min(widthScale, Math.Min(heightScale, 0.30));
-
-        var winW = _windowsWidth * scale;
-        var winH = _windowsHeight * scale;
-        var macW = _macWidth * scale;
-        var macH = _macHeight * scale;
-
-        var centreX = canvasW / 2;
-        var bottom = canvasH - 24;
-
-        var winLeft = centreX - winW / 2;
-        var winTop = bottom - winH;
-
-        _winChip = MakeChip("This PC", $"{_windowsWidth}×{_windowsHeight}", "#0067C0", "🖥");
-        _winChip.Width = winW;
-        _winChip.Height = winH;
-        Canvas.SetLeft(_winChip, winLeft);
-        Canvas.SetTop(_winChip, winTop);
-        StageCanvas.Children.Add(_winChip);
-
-        var macLeft = _peerSide == Side.Left
-            ? winLeft - macW - 12
-            : winLeft + winW + 12;
-        var macTop = bottom - macH;
-
-        _macChip = MakeChip("Mac", $"{_macWidth}×{_macHeight}", "#7B61FF", "💻");
-        _macChip.Width = macW;
-        _macChip.Height = macH;
-        Canvas.SetLeft(_macChip, macLeft);
-        Canvas.SetTop(_macChip, macTop);
-        _macChip.Cursor = Cursors.SizeAll;
-        _macChip.MouseLeftButtonDown += MacChip_MouseDown;
-        _macChip.MouseLeftButtonUp += MacChip_MouseUp;
-        _macChip.MouseMove += MacChip_MouseMove;
-        StageCanvas.Children.Add(_macChip);
+            chip.Cursor = Cursors.SizeAll;
+            chip.MouseLeftButtonDown += Remote_MouseDown;
+            chip.MouseMove += Remote_MouseMove;
+            chip.MouseLeftButtonUp += Remote_MouseUp;
+        }
+        StageCanvas.Children.Add(chip);
     }
 
     private Border MakeChip(string title, string pixels, string accentHex, string glyph)
     {
         var accent = (Color)ColorConverter.ConvertFromString(accentHex)!;
-        var soft = Color.FromArgb(0x28, accent.R, accent.G, accent.B);
-        var stroke = Color.FromArgb(0x88, accent.R, accent.G, accent.B);
-
-        var bg = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(0, 1)
-        };
-        bg.GradientStops.Add(new GradientStop(soft, 0));
-        bg.GradientStops.Add(new GradientStop(Color.FromArgb(0x10, accent.R, accent.G, accent.B), 1));
-
+        var soft = Color.FromArgb(0x30, accent.R, accent.G, accent.B);
+        var stroke = Color.FromArgb(0x99, accent.R, accent.G, accent.B);
+        var bg = new LinearGradientBrush(Color.FromArgb(0x36, accent.R, accent.G, accent.B), Color.FromArgb(0x12, accent.R, accent.G, accent.B), 90);
         var border = new Border
         {
             CornerRadius = new CornerRadius(10),
             BorderBrush = new SolidColorBrush(stroke),
             BorderThickness = new Thickness(1.2),
-            Background = bg
+            Background = bg,
+            MinWidth = 80,
+            MinHeight = 56
         };
 
         var grid = new Grid();
-        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-        var glyphText = new TextBlock
+        grid.Children.Add(new TextBlock
         {
             Text = glyph,
             FontSize = 22,
+            Opacity = 0.72,
             HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0.7
-        };
-        Grid.SetRow(glyphText, 0);
-        grid.Children.Add(glyphText);
-
-        var labelStack = new StackPanel
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        var stack = new StackPanel
         {
-            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(8, 0, 8, 6),
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8, 0, 8, 6)
+            HorizontalAlignment = HorizontalAlignment.Left
         };
-        labelStack.Children.Add(new TextBlock
-        {
-            Text = title,
-            FontWeight = FontWeights.SemiBold,
-            FontSize = 11,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A))
-        });
-        labelStack.Children.Add(new TextBlock
-        {
-            Text = pixels,
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x65, 0x65, 0x65))
-        });
-        Grid.SetRow(labelStack, 1);
-        grid.Children.Add(labelStack);
-
+        stack.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, FontSize = 11 });
+        stack.Children.Add(new TextBlock { Text = pixels, FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(0x65, 0x65, 0x65)) });
+        grid.Children.Add(stack);
         border.Child = grid;
         return border;
     }
 
-    private void MacChip_MouseDown(object sender, MouseButtonEventArgs e)
+    private void Remote_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (_macChip is null) return;
         _dragging = true;
         _dragOrigin = e.GetPosition(StageCanvas);
-        _macStartLeft = Canvas.GetLeft(_macChip);
-        _macChip.CaptureMouse();
+        if (sender is UIElement element) element.CaptureMouse();
     }
 
-    private void MacChip_MouseMove(object sender, MouseEventArgs e)
+    private void Remote_MouseMove(object sender, MouseEventArgs e)
     {
-        if (!_dragging || _macChip is null) return;
+        if (!_dragging) return;
         var p = e.GetPosition(StageCanvas);
-        var delta = p.X - _dragOrigin.X;
-        Canvas.SetLeft(_macChip, _macStartLeft + delta);
+        _dragX = p.X - _dragOrigin.X;
+        _dragY = p.Y - _dragOrigin.Y;
+        Render();
     }
 
-    private void MacChip_MouseUp(object sender, MouseButtonEventArgs e)
+    private void Remote_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (_macChip is null || _winChip is null) return;
+        if (!_dragging) return;
         _dragging = false;
-        _macChip.ReleaseMouseCapture();
+        if (sender is UIElement element) element.ReleaseMouseCapture();
+        var dx = (int)Math.Round(_dragX / Math.Max(_scale, 0.001));
+        var dy = (int)Math.Round(_dragY / Math.Max(_scale, 0.001));
+        _dragX = 0;
+        _dragY = 0;
+        RemoteMoved?.Invoke(dx, dy, true);
+        Render();
+    }
 
-        // Decide side based on chip centre relative to PC chip centre.
-        var macLeft = Canvas.GetLeft(_macChip);
-        var macCentre = macLeft + _macChip.Width / 2;
-        var winLeft = Canvas.GetLeft(_winChip);
-        var winCentre = winLeft + _winChip.Width / 2;
-        var newSide = macCentre < winCentre ? Side.Left : Side.Right;
-        if (newSide != _peerSide)
+    private static ScreenRectBounds PaddedBounds(ScreenRectBounds? bounds)
+    {
+        bounds ??= new ScreenRectBounds(0, 0, 1440, 900);
+        var padX = Math.Max(bounds.Width / 8, 240);
+        var padY = Math.Max(bounds.Height / 8, 160);
+        return new ScreenRectBounds(bounds.MinX - padX, bounds.MinY - padY, bounds.MaxX + padX, bounds.MaxY + padY);
+    }
+
+    private void DrawGrid(double canvasW, double canvasH)
+    {
+        const double spacing = 32;
+        for (double x = 0; x <= canvasW; x += spacing)
+            StageCanvas.Children.Add(new Line { X1 = x, Y1 = 0, X2 = x, Y2 = canvasH, Stroke = new SolidColorBrush(Color.FromArgb(0x12, 0, 0, 0)), StrokeThickness = 1 });
+        for (double y = 0; y <= canvasH; y += spacing)
+            StageCanvas.Children.Add(new Line { X1 = 0, Y1 = y, X2 = canvasW, Y2 = y, Stroke = new SolidColorBrush(Color.FromArgb(0x12, 0, 0, 0)), StrokeThickness = 1 });
+    }
+
+    private void DrawEmptyState(double canvasW, double canvasH)
+    {
+        var text = new TextBlock
         {
-            _peerSide = newSide;
-            SideChanged?.Invoke(newSide);
-        }
-        Layout();
+            Text = "Waiting for Mac screens",
+            Foreground = new SolidColorBrush(Color.FromRgb(0x65, 0x65, 0x65)),
+            FontWeight = FontWeights.SemiBold
+        };
+        Canvas.SetLeft(text, Math.Max(0, canvasW / 2 - 76));
+        Canvas.SetTop(text, Math.Max(0, canvasH / 2 - 12));
+        StageCanvas.Children.Add(text);
     }
 }

@@ -1,61 +1,53 @@
 using System.Runtime.InteropServices;
 using BarelyReal.Core.Km;
+using BarelyReal.Core.Layout;
 using BarelyReal.Core.Network;
 using BarelyReal.Core.Protocol;
 
 namespace BarelyReal.App.Services;
 
-/// Mirror of mac/App/Services/MacKmSession.swift::EdgeBridge.
-/// Decides whether the local cursor is "in remote (Mac) mode" and forwards frames.
+/// Layout-aware edge bridge for Windows -> Mac KM sharing.
 internal sealed class WindowsEdgeBridge
 {
-    public enum Direction
-    {
-        /// Mac is left of Windows: leaving via the left Windows edge enters Mac.
-        Left,
-        /// Mac is right of Windows: leaving via the right Windows edge enters Mac.
-        Right
-    }
-
-    public sealed class PeerScreen
-    {
-        public int Width { get; }
-        public int Height { get; }
-        public PeerScreen(int width, int height) { Width = width; Height = height; }
-    }
-
     public bool ShouldSuppressLocalEvents => _isRemoteActive;
     public Action<string>? Log;
 
-    private readonly Direction _direction;
-    private readonly PeerScreen _peerScreen;
+    private readonly string _localPeerId;
+    private readonly string _remotePeerId;
+    private readonly Func<Layout> _layoutProvider;
+    private readonly Func<IReadOnlyList<DisplayInfo>> _remoteDisplaysProvider;
     private readonly UdpKmStream _stream;
     private readonly string _peerHost;
     private readonly ushort _peerPort;
-    private readonly RECT _desktopBounds;
 
     private bool _isRemoteActive;
-    private int _remoteX;
+    private POINT? _remoteVirtualPoint;
     private POINT? _pinnedPoint;
 
-    public WindowsEdgeBridge(Direction direction, PeerScreen peerScreen, UdpKmStream stream, string peerHost, ushort peerPort)
+    public WindowsEdgeBridge(
+        string localPeerId,
+        string remotePeerId,
+        Func<Layout> layoutProvider,
+        Func<IReadOnlyList<DisplayInfo>> remoteDisplaysProvider,
+        UdpKmStream stream,
+        string peerHost,
+        ushort peerPort)
     {
-        _direction = direction;
-        _peerScreen = peerScreen;
+        _localPeerId = localPeerId;
+        _remotePeerId = remotePeerId;
+        _layoutProvider = layoutProvider;
+        _remoteDisplaysProvider = remoteDisplaysProvider;
         _stream = stream;
         _peerHost = peerHost;
         _peerPort = peerPort;
-        _desktopBounds = GetDesktopBounds();
-        _remoteX = direction == Direction.Left ? -24 : 24;
     }
 
-    /// Returns true if the frame was forwarded to the peer.
     public bool Handle(KmFrame frame)
     {
         if (!_isRemoteActive)
         {
-            if (!ShouldEnterRemote(frame)) return false;
-            var entryFrame = EnterRemote(frame);
+            var entryFrame = EntryFrameIfCrossing(frame);
+            if (entryFrame is null) return false;
             _stream.Send(entryFrame, _peerHost, _peerPort);
             return true;
         }
@@ -74,105 +66,104 @@ internal sealed class WindowsEdgeBridge
 
     public void SendBypassingEdge(KmFrame frame) => _stream.Send(frame, _peerHost, _peerPort);
 
-    /// Force-toggle remote/local mode (used by global hotkey).
     public void ToggleRemote()
     {
         if (_isRemoteActive)
         {
             ReturnLocal();
+            return;
         }
-        else
+
+        var remote = _layoutProvider().ScreensFor(_remotePeerId).FirstOrDefault();
+        if (remote is null)
         {
-            // Synthesize an entry seed so the peer side warps to a sensible position.
-            var seed = new KmFrame(
-                (uint)Random.Shared.Next(1, 1_000_000),
-                (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000,
-                KmType.MouseMoveRel,
-                KmPayload.EncodeMouseMove(new KmPayload.MouseMove(0, 0))
-            );
-            var entry = EnterRemote(seed);
-            _stream.Send(entry, _peerHost, _peerPort);
+            Log?.Invoke("No remote screen in layout");
+            return;
         }
+
+        var target = new POINT { X = remote.X + remote.Width / 2, Y = remote.Y + remote.Height / 2 };
+        var seed = new KmFrame(
+            (uint)Random.Shared.Next(1, 1_000_000),
+            (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() * 1000,
+            KmType.MouseMoveRel,
+            KmPayload.EncodeMouseMove(new KmPayload.MouseMove(0, 0)));
+        var entry = EnterRemote(target, seed);
+        if (entry is not null) _stream.Send(entry, _peerHost, _peerPort);
     }
 
-    public void Stop()
-    {
-        ReturnLocal();
-    }
+    public void Stop() => ReturnLocal();
 
-    private bool ShouldEnterRemote(KmFrame frame)
+    private KmFrame? EntryFrameIfCrossing(KmFrame frame)
     {
-        if (frame.Type != KmType.MouseMoveRel) return false;
+        if (frame.Type != KmType.MouseMoveRel) return null;
         var move = SafeDecodeMove(frame);
-        if (move is null) return false;
+        if (move is null) return null;
+        if (!GetCursorPos(out var cursor)) return null;
 
-        if (!GetCursorPos(out var cursor)) return false;
-        return _direction switch
-        {
-            Direction.Left  => move.Value.X < 0 && cursor.X <= _desktopBounds.Left + 2,
-            Direction.Right => move.Value.X > 0 && cursor.X >= _desktopBounds.Right - 2,
-            _ => false
-        };
+        var projected = new POINT { X = cursor.X + move.Value.X, Y = cursor.Y + move.Value.Y };
+        var layout = _layoutProvider();
+        var currentScreen = layout.Screen(cursor.X, cursor.Y);
+        var target = layout.Screen(projected.X, projected.Y);
+        if (currentScreen?.PeerId != _localPeerId || target?.PeerId != _remotePeerId) return null;
+
+        projected.X = Math.Clamp(projected.X, target.X, target.MaxX - 1);
+        projected.Y = Math.Clamp(projected.Y, target.Y, target.MaxY - 1);
+        return EnterRemote(projected, frame);
     }
 
-    private bool ShouldReturnLocal(KmFrame frame)
+    private KmFrame? EnterRemote(POINT virtualPoint, KmFrame reference)
     {
-        if (frame.Type != KmType.MouseMoveRel) return false;
-        var move = SafeDecodeMove(frame);
-        if (move is null) return false;
+        var layout = _layoutProvider();
+        var target = layout.Screen(virtualPoint.X, virtualPoint.Y);
+        if (target?.PeerId != _remotePeerId) return null;
 
-        return _direction switch
-        {
-            Direction.Left  => move.Value.X > 0 && _remoteX + move.Value.X >= 0,
-            Direction.Right => move.Value.X < 0 && _remoteX + move.Value.X <= 0,
-            _ => false
-        };
-    }
-
-    private void UpdateRemotePosition(KmFrame frame)
-    {
-        if (frame.Type != KmType.MouseMoveRel) return;
-        var move = SafeDecodeMove(frame);
-        if (move is null) return;
-
-        switch (_direction)
-        {
-            case Direction.Left:  _remoteX = Math.Min(0, _remoteX + move.Value.X); break;
-            case Direction.Right: _remoteX = Math.Max(0, _remoteX + move.Value.X); break;
-        }
-    }
-
-    private KmFrame EnterRemote(KmFrame reference)
-    {
         _isRemoteActive = true;
-        _remoteX = _direction == Direction.Left ? -24 : 24;
+        _remoteVirtualPoint = virtualPoint;
+        if (GetCursorPos(out var cursor))
+        {
+            _pinnedPoint = cursor;
+            _ = SetCursorPos(cursor.X, cursor.Y);
+        }
 
-        if (!GetCursorPos(out var cursor))
-            cursor = new POINT { X = _desktopBounds.Left, Y = _desktopBounds.Top };
-
-        _pinnedPoint = LocalPinPoint(cursor.Y);
-        if (_pinnedPoint is { } pin) _ = SetCursorPos(pin.X, pin.Y);
-
-        var entry = PeerEntryPoint(cursor.Y);
-        Log?.Invoke($"Entered Mac at peer x={entry.X}, y={entry.Y}");
+        var native = RemoteNativePoint(virtualPoint, target);
+        Log?.Invoke($"Entered Mac screen {target.ScreenId} at peer x={native.X}, y={native.Y}");
         return new KmFrame(
             reference.Seq,
             reference.TimestampUs,
             KmType.MouseMoveAbs,
-            KmPayload.EncodeMouseMove(entry));
+            KmPayload.EncodeMouseMove(new KmPayload.MouseMove(native.X, native.Y)));
+    }
+
+    private bool ShouldReturnLocal(KmFrame frame)
+    {
+        if (frame.Type != KmType.MouseMoveRel || _remoteVirtualPoint is null) return false;
+        var move = SafeDecodeMove(frame);
+        if (move is null) return false;
+        var projected = new POINT { X = _remoteVirtualPoint.Value.X + move.Value.X, Y = _remoteVirtualPoint.Value.Y + move.Value.Y };
+        if (_layoutProvider().Screen(projected.X, projected.Y)?.PeerId == _localPeerId)
+        {
+            _pinnedPoint = projected;
+            return true;
+        }
+        return false;
+    }
+
+    private void UpdateRemotePosition(KmFrame frame)
+    {
+        if (frame.Type != KmType.MouseMoveRel || _remoteVirtualPoint is null) return;
+        var move = SafeDecodeMove(frame);
+        if (move is null) return;
+        _remoteVirtualPoint = new POINT { X = _remoteVirtualPoint.Value.X + move.Value.X, Y = _remoteVirtualPoint.Value.Y + move.Value.Y };
     }
 
     private void ReturnLocal()
     {
         if (!_isRemoteActive) return;
         _isRemoteActive = false;
+        if (_pinnedPoint is { } point)
+            _ = SetCursorPos(point.X, point.Y);
+        _remoteVirtualPoint = null;
         _pinnedPoint = null;
-
-        var x = _direction == Direction.Left
-            ? _desktopBounds.Left + 4
-            : _desktopBounds.Right - 4;
-        if (GetCursorPos(out var cursor))
-            _ = SetCursorPos(x, cursor.Y);
         Log?.Invoke("Returned to Windows");
     }
 
@@ -182,24 +173,18 @@ internal sealed class WindowsEdgeBridge
             _ = SetCursorPos(pin.X, pin.Y);
     }
 
-    private KmPayload.MouseMove PeerEntryPoint(int localY)
+    private POINT RemoteNativePoint(POINT virtualPoint, ScreenRect layoutScreen)
     {
-        var maxX = Math.Max(_peerScreen.Width - 1, 0);
-        var maxY = Math.Max(_peerScreen.Height - 1, 0);
-        var x = _direction == Direction.Left ? maxX : 0;
-        var height = _desktopBounds.Bottom - _desktopBounds.Top;
-        var normalizedY = height > 0
-            ? Math.Clamp((double)(localY - _desktopBounds.Top) / height, 0, 1)
-            : 0.5;
-        var y = (int)Math.Round(normalizedY * maxY);
-        return new KmPayload.MouseMove(x, Math.Clamp(y, 0, maxY));
-    }
-
-    private POINT LocalPinPoint(int localY)
-    {
-        var x = _direction == Direction.Left ? _desktopBounds.Left + 1 : _desktopBounds.Right - 1;
-        var clampedY = Math.Clamp(localY, _desktopBounds.Top, _desktopBounds.Bottom - 1);
-        return new POINT { X = x, Y = clampedY };
+        var native = _remoteDisplaysProvider().FirstOrDefault(display => display.ScreenId == layoutScreen.ScreenId);
+        if (native is not null)
+        {
+            return new POINT
+            {
+                X = native.X + (virtualPoint.X - layoutScreen.X),
+                Y = native.Y + (virtualPoint.Y - layoutScreen.Y)
+            };
+        }
+        return new POINT { X = virtualPoint.X - layoutScreen.X, Y = virtualPoint.Y - layoutScreen.Y };
     }
 
     private static KmPayload.MouseMove? SafeDecodeMove(KmFrame frame)
@@ -208,27 +193,9 @@ internal sealed class WindowsEdgeBridge
         catch { return null; }
     }
 
-    private static RECT GetDesktopBounds()
-    {
-        // SM_XVIRTUALSCREEN/YVIRTUALSCREEN/CXVIRTUALSCREEN/CYVIRTUALSCREEN cover the whole virtual desktop.
-        var x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        var y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        var w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        var h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-        return new RECT { Left = x, Top = y, Right = x + w, Bottom = y + h };
-    }
-
-    private struct RECT { public int Left, Top, Right, Bottom; }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int X, int Y);
-    [DllImport("user32.dll")] private static extern int GetSystemMetrics(int nIndex);
-
-    private const int SM_XVIRTUALSCREEN = 76;
-    private const int SM_YVIRTUALSCREEN = 77;
-    private const int SM_CXVIRTUALSCREEN = 78;
-    private const int SM_CYVIRTUALSCREEN = 79;
 }

@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using BarelyReal.App.Services;
+using BarelyReal.Core.Layout;
+using BarelyReal.Core.Network;
 
 namespace BarelyReal.App;
 
@@ -14,6 +16,13 @@ public partial class MainWindow : Window
 {
     private readonly DevReceiverService _receiver = new();
     private readonly DevSenderService _sender = new();
+    private readonly DevControlSession _control = new();
+    private const string LocalPeerId = "windows";
+    private const string RemotePeerId = "mac";
+    private List<DisplayInfo> _localDisplays = new();
+    private List<DisplayInfo> _remoteDisplays = new();
+    private BarelyReal.Core.Layout.Layout _virtualLayout = new();
+    private bool _remoteScreensStale = true;
     private bool _uiReady;
 
     private bool IsSendMode => ModeSendRadio?.IsChecked == true;
@@ -27,10 +36,14 @@ public partial class MainWindow : Window
         _receiver.HistoryChanged += () => Dispatcher.BeginInvoke(RefreshClipboardHistory);
         _sender.LogLine += AppendLog;
         _sender.StatsChanged += UpdateStatus;
+        _control.LogLine += AppendLog;
+        _control.ScreenAnnounced += announcement => Dispatcher.BeginInvoke(() => ApplyRemoteAnnouncement(announcement));
+        _control.LayoutSynced += layout => Dispatcher.BeginInvoke(() => ApplyRemoteLayout(layout));
 
         KmPortBox.TextChanged += CommandInput_Changed;
         ClipboardPortBox.TextChanged += CommandInput_Changed;
         ClipboardPeerBox.TextChanged += CommandInput_Changed;
+        ControlPortBox.TextChanged += CommandInput_Changed;
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
@@ -41,6 +54,8 @@ public partial class MainWindow : Window
         WidthBox.Text = GetSystemMetric(0).ToString();
         HeightBox.Text = GetSystemMetric(1).ToString();
 
+        RefreshDisplays();
+        ReconcileLayout();
         RefreshAddresses();
         _uiReady = true;
         UpdateMacCommand();
@@ -52,44 +67,21 @@ public partial class MainWindow : Window
     private void WireLayoutDesigner()
     {
         if (LayoutDesigner is null) return;
-        LayoutDesigner.SideChanged += side =>
-        {
-            // Rendering convention: PeerSide describes where the *Mac* lives relative to this PC.
-            // SendMacSideCombo conversely names the Mac's "side" of the layout, where 'left' means
-            // "Mac is left of Windows" — so the two map directly.
-            var item = side == Controls.LayoutCanvas.Side.Left ? "left" : "right";
-            foreach (var i in SendMacSideCombo.Items)
-            {
-                if (i is ComboBoxItem cb && (cb.Content?.ToString() ?? "") == item)
-                {
-                    SendMacSideCombo.SelectedItem = cb;
-                    break;
-                }
-            }
-        };
-        SendMacSideCombo.SelectionChanged += (_, _) => RefreshLayoutDesigner();
-        SendMacWidthBox.TextChanged += (_, _) => RefreshLayoutDesigner();
-        SendMacHeightBox.TextChanged += (_, _) => RefreshLayoutDesigner();
+        LayoutDesigner.RemoteMoved += MoveRemoteGroup;
         RefreshLayoutDesigner();
     }
 
     private void RefreshLayoutDesigner()
     {
         if (LayoutDesigner is null) return;
-        var side = (SendMacSideCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() == "right"
-            ? Controls.LayoutCanvas.Side.Right
-            : Controls.LayoutCanvas.Side.Left;
-        var winW = GetSystemMetric(0);
-        var winH = GetSystemMetric(1);
-        if (!int.TryParse(SendMacWidthBox.Text, out var macW) || macW <= 0) macW = 2560;
-        if (!int.TryParse(SendMacHeightBox.Text, out var macH) || macH <= 0) macH = 1600;
-        LayoutDesigner.Refresh(winW, winH, macW, macH, side);
+        LayoutDesigner.Refresh(_virtualLayout, LocalPeerId, RemotePeerId, _remoteScreensStale);
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         _receiver.Dispose();
         _sender.Dispose();
+        _control.Dispose();
     }
 
     // MARK: - Navigation
@@ -188,6 +180,7 @@ public partial class MainWindow : Window
     {
         if (IsSendMode) _sender.Stop();
         else _receiver.Stop();
+        _control.Close();
     }
 
     private void ModeRadio_Changed(object sender, RoutedEventArgs e)
@@ -200,6 +193,7 @@ public partial class MainWindow : Window
 
         if (IsSendMode) _receiver.Stop();
         else            _sender.Stop();
+        _control.Close();
 
         UpdateStatus();
     }
@@ -217,15 +211,10 @@ public partial class MainWindow : Window
             AppendLog($"[{DateTime.Now:HH:mm:ss}] Mac IP required.");
             return;
         }
-        var direction = (SendMacSideCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() == "right"
-            ? WindowsEdgeBridge.Direction.Right
-            : WindowsEdgeBridge.Direction.Left;
-        if (!int.TryParse(SendMacWidthBox.Text.Trim(), out var width) || width <= 0) width = 2560;
-        if (!int.TryParse(SendMacHeightBox.Text.Trim(), out var height) || height <= 0) height = 1600;
-
         try
         {
-            _sender.Start(host, port, direction, width, height);
+            StartControl(host);
+            _sender.Start(host, port, LocalPeerId, RemotePeerId, () => _virtualLayout, () => _remoteDisplays);
         }
         catch (Exception ex)
         {
@@ -304,6 +293,7 @@ public partial class MainWindow : Window
         try
         {
             _receiver.Start(kmPort, ClipboardPeerBox.Text, clipboardPort);
+            StartControl(ClipboardPeerBox.Text);
         }
         catch (Exception ex)
         {
@@ -331,6 +321,135 @@ public partial class MainWindow : Window
         }
 
         return true;
+    }
+
+    private void StartControl(string peerHost)
+    {
+        if (!ushort.TryParse(ControlPortBox.Text.Trim(), out var controlPort))
+        {
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Invalid control port.");
+            return;
+        }
+
+        RefreshDisplays();
+        ReconcileLayout();
+        _control.Start(controlPort, peerHost, controlPort);
+        SendControlSnapshot();
+    }
+
+    private void SendControlSnapshot()
+    {
+        var announced = _localDisplays.Select(AnnouncedScreen.FromDisplay).ToArray();
+        _control.SendHello(new HelloMessage(Environment.MachineName, "Windows", "0.1.0", announced));
+        _control.SendScreenAnnounce(new ScreenAnnouncement(LocalPeerId, announced));
+        _control.SendLayoutSync(new LayoutSyncMessage(_virtualLayout.Screens));
+    }
+
+    private void RefreshDisplays()
+    {
+        _localDisplays = DisplayEnumerator.LocalDisplays(LocalPeerId).ToList();
+    }
+
+    private void ApplyRemoteAnnouncement(ScreenAnnouncement announcement)
+    {
+        if (announcement.PeerId == LocalPeerId) return;
+        _remoteDisplays = announcement.Screens.Select(screen => screen.ToDisplayInfo(RemotePeerId)).ToList();
+        _remoteScreensStale = false;
+        ReconcileLayout();
+        RefreshLayoutDesigner();
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Peer screens updated: {_remoteDisplays.Count}");
+    }
+
+    private void ApplyRemoteLayout(LayoutSyncMessage message)
+    {
+        RefreshDisplays();
+        var incoming = new BarelyReal.Core.Layout.Layout(message.Layout);
+        var localNative = _localDisplays.Select(display => display.ScreenRect).ToList();
+        var incomingLocal = incoming.Bounds(LocalPeerId);
+        var nativeLocal = new BarelyReal.Core.Layout.Layout(localNative).Bounds(LocalPeerId);
+        if (incomingLocal is null || nativeLocal is null)
+        {
+            _virtualLayout = new BarelyReal.Core.Layout.Layout(localNative.Concat(incoming.ScreensFor(RemotePeerId)));
+            RefreshLayoutDesigner();
+            return;
+        }
+
+        var dx = nativeLocal.MinX - incomingLocal.MinX;
+        var dy = nativeLocal.MinY - incomingLocal.MinY;
+        var remote = incoming.ScreensFor(RemotePeerId)
+            .Select(screen => screen with { X = screen.X + dx, Y = screen.Y + dy });
+        _virtualLayout = new BarelyReal.Core.Layout.Layout(localNative.Concat(remote));
+        RefreshLayoutDesigner();
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Layout synced from peer.");
+    }
+
+    private void ReconcileLayout()
+    {
+        RefreshDisplays();
+        var localScreens = _localDisplays.Select(display => display.ScreenRect).ToList();
+        var remoteScreens = _remoteDisplays.Select(display => display.ScreenRect).ToList();
+        if (localScreens.Count == 0)
+        {
+            _virtualLayout = new BarelyReal.Core.Layout.Layout(remoteScreens);
+            return;
+        }
+        if (remoteScreens.Count == 0)
+        {
+            _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(_virtualLayout.ScreensFor(RemotePeerId)));
+            return;
+        }
+
+        var existingRemote = _virtualLayout.ScreensFor(RemotePeerId);
+        var remoteIds = remoteScreens.Select(screen => screen.ScreenId).OrderBy(id => id).ToArray();
+        var existingIds = existingRemote.Select(screen => screen.ScreenId).OrderBy(id => id).ToArray();
+        if (existingRemote.Count > 0 && remoteIds.SequenceEqual(existingIds))
+        {
+            var byId = existingRemote.ToDictionary(screen => screen.ScreenId);
+            var updatedRemote = remoteScreens.Select(native => byId.TryGetValue(native.ScreenId, out var existing)
+                ? native with { X = existing.X, Y = existing.Y }
+                : native);
+            _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(updatedRemote));
+            return;
+        }
+
+        var localBounds = new BarelyReal.Core.Layout.Layout(localScreens).Bounds(LocalPeerId);
+        var remoteBounds = new BarelyReal.Core.Layout.Layout(remoteScreens).Bounds(RemotePeerId);
+        if (localBounds is null || remoteBounds is null)
+        {
+            _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(remoteScreens));
+            return;
+        }
+
+        var dx = localBounds.MinX - remoteBounds.MaxX;
+        var dy = localBounds.MinY - remoteBounds.MinY;
+        var translated = remoteScreens.Select(screen => screen with { X = screen.X + dx, Y = screen.Y + dy });
+        _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(translated));
+    }
+
+    private void MoveRemoteGroup(int dx, int dy, bool snap)
+    {
+        _virtualLayout = _virtualLayout.Translated(RemotePeerId, dx, dy);
+        if (snap) _virtualLayout = SnappedRemoteLayout(_virtualLayout);
+        RefreshLayoutDesigner();
+        _control.SendLayoutSync(new LayoutSyncMessage(_virtualLayout.Screens));
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Layout updated: {RemotePeerId} moved.");
+    }
+
+    private BarelyReal.Core.Layout.Layout SnappedRemoteLayout(BarelyReal.Core.Layout.Layout layout)
+    {
+        var local = layout.Bounds(LocalPeerId);
+        var remote = layout.Bounds(RemotePeerId);
+        if (local is null || remote is null) return layout;
+
+        var candidates = new (int Dx, int Dy, int Distance)[]
+        {
+            (local.MinX - remote.MaxX, 0, Math.Abs(local.MinX - remote.MaxX)),
+            (local.MaxX - remote.MinX, 0, Math.Abs(local.MaxX - remote.MinX)),
+            (0, local.MinY - remote.MaxY, Math.Abs(local.MinY - remote.MaxY)),
+            (0, local.MaxY - remote.MinY, Math.Abs(local.MaxY - remote.MinY)),
+        };
+        var best = candidates.OrderBy(candidate => candidate.Distance).First();
+        return layout.Translated(RemotePeerId, best.Dx, best.Dy);
     }
 
     // MARK: - Status
@@ -379,14 +498,12 @@ public partial class MainWindow : Window
         // Enabled state
         StartButton.IsEnabled = !running;
         StopButton.IsEnabled = running;
+        ControlPortBox.IsEnabled = !running;
         KmPortBox.IsEnabled = !running;
         ClipboardPortBox.IsEnabled = !running;
         ClipboardPeerBox.IsEnabled = !running;
         SendMacHostBox.IsEnabled = !running;
         SendMacKmPortBox.IsEnabled = !running;
-        SendMacSideCombo.IsEnabled = !running;
-        SendMacWidthBox.IsEnabled = !running;
-        SendMacHeightBox.IsEnabled = !running;
 
         FooterText.Text = running
             ? IsSendMode

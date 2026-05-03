@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:BarelyReal.App.Controls"
         Title="BarelyReal"
+        Icon="Assets/BarelyReal.ico"
         Width="1100"
         Height="760"
         MinWidth="940"
@@ -418,9 +419,18 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                        <TextBlock Text="Control" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                            <TextBlock Text="TCP " VerticalAlignment="Center" />
+                                            <TextBox x:Name="ControlPortBox" Text="24800" Width="74" Padding="8,4" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
                                         <TextBlock Text="Keyboard &amp; mouse" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="UDP " VerticalAlignment="Center" />
@@ -428,7 +438,7 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <StackPanel Grid.Column="2" Margin="8,0,8,0">
                                         <TextBlock Text="Clipboard" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="TCP " VerticalAlignment="Center" />
@@ -436,8 +446,8 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="2" Margin="8,0,0,0">
-                                        <TextBlock Text="Mac IP (clipboard)" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                    <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                        <TextBlock Text="Mac IP (control/clipboard)" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="ClipboardPeerBox" Text="192.168.0.101" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Grid>
@@ -459,36 +469,15 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="2*" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
 
-                                    <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,10">
+                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
                                         <TextBlock Text="Mac IP" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="SendMacHostBox" Margin="0,4,0,0" Text="192.168.0.101" />
                                     </StackPanel>
-                                    <StackPanel Grid.Row="0" Grid.Column="1" Margin="8,0,8,10">
+                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                         <TextBlock Text="Mac KM port" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="SendMacKmPortBox" Margin="0,4,0,0" Text="24801" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Row="0" Grid.Column="2" Margin="8,0,0,10">
-                                        <TextBlock Text="Mac side" Foreground="{StaticResource MutedBrush}" FontSize="11" />
-                                        <ComboBox x:Name="SendMacSideCombo" Margin="0,4,0,0">
-                                            <ComboBoxItem Content="left" IsSelected="True" />
-                                            <ComboBoxItem Content="right" />
-                                        </ComboBox>
-                                    </StackPanel>
-
-                                    <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,8,0">
-                                        <TextBlock Text="Mac display width (px)" Foreground="{StaticResource MutedBrush}" FontSize="11" />
-                                        <TextBox x:Name="SendMacWidthBox" Margin="0,4,0,0" Text="2560" />
-                                    </StackPanel>
-                                    <StackPanel Grid.Row="1" Grid.Column="1" Margin="8,0,8,0">
-                                        <TextBlock Text="Mac display height (px)" Foreground="{StaticResource MutedBrush}" FontSize="11" />
-                                        <TextBox x:Name="SendMacHeightBox" Margin="0,4,0,0" Text="1600" />
                                     </StackPanel>
                                 </Grid>
 

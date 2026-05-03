@@ -21,7 +21,7 @@ Single user-space process running:
 - **KMGuest** — receives KM events from the peer, injects them locally.
 - **ClipboardSync** — listens to OS clipboard changes, mirrors to the peer.
 - **FileTransfer** — handles drag&drop file streams.
-- **LayoutEngine** — knows where each screen lives in virtual coordinate space, decides ownership transfer at edges.
+- **LayoutEngine** — stores every local/remote screen in one virtual coordinate plane and decides ownership transfer at any bordering edge.
 - **UI** — tray icon, layout editor, settings, pairing flow.
 
 Roles `KMHost` and `KMGuest` are not mutually exclusive — a machine can host KM (capturing) most of the time and switch to guest (receiving) when ownership flips.
@@ -61,16 +61,14 @@ mac/                                              windows/
 
 ## Edge-transition flow
 
-1. Active host owns KM. Cursor is hidden on the guest's screens. Local cursor is visible.
-2. User moves mouse toward an edge that, per layout, borders a guest screen.
-3. When local cursor crosses the edge:
-   - Host emits `OwnershipTransfer { target_screen, entry_x, entry_y }` on control channel.
-   - Host enables "remote mode": cursor is associated-disabled (`CGAssociateMouseAndMouseCursorPosition(false)` on macOS / `ClipCursor` to a 1×1 region on Windows). Mouse motion now reads as `MouseMoveRel` events sent over UDP.
-4. Guest:
-   - Warps its system cursor to `(entry_x, entry_y)`.
-   - Begins applying `MouseMoveRel`, `KeyDown`, `KeyUp`, etc. via OS injection.
-   - Shows its local cursor.
-5. Reverse: when guest's cursor reaches the edge that borders the host, guest sends `OwnershipTransfer` back, restores its own cursor invisibility, host re-grabs.
+1. Both peers announce all OS-enumerated displays through the control channel (`ScreenAnnounce`) and keep a synced `LayoutSync` document.
+2. Active host owns KM. Local cursor is visible; remote mode is inactive.
+3. User moves mouse toward any physical edge. The host projects the next cursor point into the shared virtual layout.
+4. If that projected point is inside a peer screen, the host:
+   - sends a `MouseMoveAbs` UDP frame to the corresponding native point on the peer screen;
+   - enters remote mode and hides/pins its local cursor (`CGAssociateMouseAndMouseCursorPosition(false)` on macOS / `ClipCursor` to a 1×1 region on Windows);
+   - streams subsequent `MouseMoveRel`, `MouseButton`, `KeyDown`, `KeyUp`, etc. frames.
+5. Reverse uses the same virtual layout: if the tracked remote virtual cursor crosses back into a local screen, the host restores the local cursor at that mapped point and exits remote mode.
 
 Force-switch hotkey (default `Ctrl+Alt+S`) bypasses edge logic.
 

@@ -11,10 +11,13 @@
     <UseWPF>true</UseWPF>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ApplicationIcon>Assets\BarelyReal.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Core\BarelyReal.Core.csproj" />
+    <Resource Include="Assets\BarelyReal.ico" />
+    <Resource Include="Assets\BarelyReal.png" />
   </ItemGroup>
 
 </Project>

@@ -7,8 +7,10 @@ import Network
 final class MacKmSession {
     private let peerHost: String
     private let peerPort: UInt16
-    private let direction: EdgeDirection
-    private let peerScreen: PeerScreen
+    private let localPeerId: String
+    private let remotePeerId: String
+    private let layoutProvider: () -> Layout
+    private let remoteDisplaysProvider: () -> [DisplayInfo]
     private let scrollSpeed: Int
     private let log: (String) -> Void
 
@@ -17,14 +19,25 @@ final class MacKmSession {
     private var bridge: EdgeBridge?
     private var sentCount = 0
     private var heartbeatPump: KmHeartbeatPump?
-    private var heartbeatSeq: UInt32 = 1_000_000_000  // out-of-band, won't collide with real KM seq
+    private var heartbeatSeq: UInt32 = 1_000_000_000
     private let hotkey = HotkeyManager()
 
-    init(peerHost: String, peerPort: UInt16, direction: EdgeDirection, peerScreen: PeerScreen, scrollSpeed: Int, log: @escaping (String) -> Void) {
+    init(
+        peerHost: String,
+        peerPort: UInt16,
+        localPeerId: String,
+        remotePeerId: String,
+        layoutProvider: @escaping () -> Layout,
+        remoteDisplaysProvider: @escaping () -> [DisplayInfo],
+        scrollSpeed: Int,
+        log: @escaping (String) -> Void
+    ) {
         self.peerHost = peerHost
         self.peerPort = peerPort
-        self.direction = direction
-        self.peerScreen = peerScreen
+        self.localPeerId = localPeerId
+        self.remotePeerId = remotePeerId
+        self.layoutProvider = layoutProvider
+        self.remoteDisplaysProvider = remoteDisplaysProvider
         self.scrollSpeed = scrollSpeed
         self.log = log
     }
@@ -36,8 +49,10 @@ final class MacKmSession {
 
         let endpoint = NWEndpoint.hostPort(host: .name(peerHost, nil), port: port)
         let bridge = EdgeBridge(
-            direction: direction,
-            peerScreen: peerScreen,
+            localPeerId: localPeerId,
+            remotePeerId: remotePeerId,
+            layoutProvider: layoutProvider,
+            remoteDisplaysProvider: remoteDisplaysProvider,
             stream: stream,
             endpoint: endpoint,
             log: log
@@ -61,8 +76,6 @@ final class MacKmSession {
 
         try tap.start()
 
-        // Heartbeat keeps the receiver's link-monitor happy while the user is idle.
-        // Always sent — costs ~20 datagrams/s of ~13 bytes each = 260 B/s. Trivial.
         let pump = KmHeartbeatPump(
             nextSeq: { [weak self] in
                 guard let self else { return 0 }
@@ -78,7 +91,6 @@ final class MacKmSession {
         pump.start()
         self.heartbeatPump = pump
 
-        // Global hotkey for force-switch (default ⌃⇧⌥⌘S).
         hotkey.onForceSwitch = { [weak self] in
             guard let self, let bridge = self.bridge else { return }
             bridge.toggleRemote()
@@ -109,23 +121,6 @@ enum KmSessionError: Error, CustomStringConvertible {
     }
 }
 
-enum EdgeDirection {
-    case left
-    case right
-
-    var initialRemoteX: Int32 {
-        switch self {
-        case .left: -24
-        case .right: 24
-        }
-    }
-}
-
-struct PeerScreen {
-    let width: Int32
-    let height: Int32
-}
-
 private final class RemoteInputGuard {
     private var isActive = false
     private var cursorHidden = false
@@ -133,7 +128,6 @@ private final class RemoteInputGuard {
 
     func start(pinnedAt point: CGPoint) {
         guard !isActive else { return }
-
         pinnedPoint = point
         CGWarpMouseCursorPosition(point)
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
@@ -153,7 +147,6 @@ private final class RemoteInputGuard {
 
     func stop() {
         guard isActive else { return }
-
         if cursorHidden {
             _ = CGDisplayShowCursor(CGMainDisplayID())
             cursorHidden = false
@@ -163,43 +156,49 @@ private final class RemoteInputGuard {
         isActive = false
     }
 
-    deinit {
-        stop()
-    }
+    deinit { stop() }
 }
 
 private final class EdgeBridge {
-    private let direction: EdgeDirection
-    private let peerScreen: PeerScreen
+    private let localPeerId: String
+    private let remotePeerId: String
+    private let layoutProvider: () -> Layout
+    private let remoteDisplaysProvider: () -> [DisplayInfo]
     private let stream: UdpKmStream
     private let endpoint: NWEndpoint
     private let log: (String) -> Void
     private let guardController = RemoteInputGuard()
-    private let desktopBounds: CGRect
 
     private var isRemoteActive = false
-    private var remoteX: Int32
+    private var remoteVirtualPoint: CGPoint?
+    private var pinnedLocalPoint: CGPoint?
 
-    init(direction: EdgeDirection, peerScreen: PeerScreen, stream: UdpKmStream, endpoint: NWEndpoint, log: @escaping (String) -> Void) {
-        self.direction = direction
-        self.peerScreen = peerScreen
+    init(
+        localPeerId: String,
+        remotePeerId: String,
+        layoutProvider: @escaping () -> Layout,
+        remoteDisplaysProvider: @escaping () -> [DisplayInfo],
+        stream: UdpKmStream,
+        endpoint: NWEndpoint,
+        log: @escaping (String) -> Void
+    ) {
+        self.localPeerId = localPeerId
+        self.remotePeerId = remotePeerId
+        self.layoutProvider = layoutProvider
+        self.remoteDisplaysProvider = remoteDisplaysProvider
         self.stream = stream
         self.endpoint = endpoint
         self.log = log
-        self.desktopBounds = Self.currentDesktopBounds()
-        self.remoteX = direction.initialRemoteX
     }
 
-    var shouldSuppressLocalEvents: Bool {
-        isRemoteActive
-    }
+    var shouldSuppressLocalEvents: Bool { isRemoteActive }
+    var isRemote: Bool { isRemoteActive }
 
     @discardableResult
     func handle(_ frame: KmFrame) -> Bool {
         if !isRemoteActive {
-            guard shouldEnterRemote(for: frame) else { return false }
-            let entryFrame = enterRemote(reference: frame)
-            stream.send(entryFrame, to: endpoint)
+            guard let entry = entryFrameIfCrossing(frame) else { return false }
+            stream.send(entry, to: endpoint)
             return true
         }
 
@@ -218,142 +217,117 @@ private final class EdgeBridge {
         returnLocal()
     }
 
-    /// Send a frame regardless of remote/local state. Used by the heartbeat pump.
     func sendBypassingEdge(_ frame: KmFrame) {
         stream.send(frame, to: endpoint)
     }
 
-    var isRemote: Bool { isRemoteActive }
-
-    /// Forcibly toggle remote/local mode (used by global hotkey).
     func toggleRemote() {
         if isRemoteActive {
             returnLocal()
-        } else {
-            // Synthesize an "entry" frame from cursor position to seed the peer side.
-            let now = UInt64(Date().timeIntervalSince1970 * 1_000_000)
-            let seed = KmFrame(
-                seq: UInt32.random(in: 1...1_000_000),
-                timestampUs: now,
-                type: .mouseMoveRel,
-                payload: KmPayload.encodeMouseMove(.init(x: 0, y: 0))
-            )
-            let entryFrame = enterRemote(reference: seed)
-            stream.send(entryFrame, to: endpoint)
-        }
-    }
-
-    private func shouldEnterRemote(for frame: KmFrame) -> Bool {
-        guard frame.type == .mouseMoveRel,
-              let move = try? KmPayload.decodeMouseMove(frame.payload)
-        else {
-            return false
-        }
-
-        let location = Self.currentCursorLocation()
-        switch direction {
-        case .left:
-            return move.x < 0 && location.x <= desktopBounds.minX + 2
-        case .right:
-            return move.x > 0 && location.x >= desktopBounds.maxX - 2
-        }
-    }
-
-    private func shouldReturnLocal(for frame: KmFrame) -> Bool {
-        guard frame.type == .mouseMoveRel,
-              let move = try? KmPayload.decodeMouseMove(frame.payload)
-        else {
-            return false
-        }
-
-        switch direction {
-        case .left:
-            return move.x > 0 && remoteX + move.x >= 0
-        case .right:
-            return move.x < 0 && remoteX + move.x <= 0
-        }
-    }
-
-    private func updateRemotePosition(for frame: KmFrame) {
-        guard frame.type == .mouseMoveRel,
-              let move = try? KmPayload.decodeMouseMove(frame.payload)
-        else {
             return
         }
 
-        switch direction {
-        case .left:
-            remoteX = min(0, remoteX + move.x)
-        case .right:
-            remoteX = max(0, remoteX + move.x)
+        let layout = layoutProvider()
+        guard let remote = layout.screens(peerId: remotePeerId).first else {
+            log("No remote screen in layout")
+            return
         }
+        let targetVirtual = CGPoint(x: remote.x + remote.width / 2, y: remote.y + remote.height / 2)
+        enterRemote(virtualPoint: targetVirtual, reference: KmFrame(
+            seq: UInt32.random(in: 1...1_000_000),
+            timestampUs: UInt64(Date().timeIntervalSince1970 * 1_000_000),
+            type: .mouseMoveRel,
+            payload: KmPayload.encodeMouseMove(.init(x: 0, y: 0))
+        )).map { stream.send($0, to: endpoint) }
     }
 
-    private func enterRemote(reference frame: KmFrame) -> KmFrame {
-        isRemoteActive = true
-        remoteX = direction.initialRemoteX
-        let localLocation = Self.currentCursorLocation()
-        guardController.start(pinnedAt: localPinPoint(localY: localLocation.y))
-        let entryPoint = peerEntryPoint(localY: localLocation.y)
-        log("Entered Windows at x=\(entryPoint.x), y=\(entryPoint.y)")
+    private func entryFrameIfCrossing(_ frame: KmFrame) -> KmFrame? {
+        guard frame.type == .mouseMoveRel,
+              let move = try? KmPayload.decodeMouseMove(frame.payload)
+        else { return nil }
 
+        let current = Self.currentCursorLocation()
+        let projected = CGPoint(x: current.x + CGFloat(move.x), y: current.y + CGFloat(move.y))
+        let layout = layoutProvider()
+        guard layout.screen(at: Int(current.x.rounded()), Int(current.y.rounded()))?.peerId == localPeerId,
+              let target = layout.screen(at: Int(projected.x.rounded()), Int(projected.y.rounded())),
+              target.peerId == remotePeerId
+        else { return nil }
+
+        let clamped = CGPoint(
+            x: min(max(projected.x, CGFloat(target.x)), CGFloat(target.maxX - 1)),
+            y: min(max(projected.y, CGFloat(target.y)), CGFloat(target.maxY - 1))
+        )
+        return enterRemote(virtualPoint: clamped, reference: frame)
+    }
+
+    private func enterRemote(virtualPoint: CGPoint, reference frame: KmFrame) -> KmFrame? {
+        let layout = layoutProvider()
+        guard let target = layout.screen(at: Int(virtualPoint.x.rounded()), Int(virtualPoint.y.rounded())),
+              target.peerId == remotePeerId
+        else { return nil }
+
+        isRemoteActive = true
+        remoteVirtualPoint = virtualPoint
+        let current = Self.currentCursorLocation()
+        pinnedLocalPoint = current
+        guardController.start(pinnedAt: current)
+
+        let native = remoteNativePoint(for: virtualPoint, in: target)
+        log("Entered Windows screen \(target.screenId) at x=\(native.x), y=\(native.y)")
         return KmFrame(
             seq: frame.seq,
             timestampUs: frame.timestampUs,
             type: .mouseMoveAbs,
-            payload: KmPayload.encodeMouseMove(entryPoint)
+            payload: KmPayload.encodeMouseMove(.init(x: Int32(native.x.rounded()), y: Int32(native.y.rounded())))
         )
+    }
+
+    private func shouldReturnLocal(for frame: KmFrame) -> Bool {
+        guard frame.type == .mouseMoveRel,
+              let move = try? KmPayload.decodeMouseMove(frame.payload),
+              let remoteVirtualPoint
+        else { return false }
+
+        let projected = CGPoint(x: remoteVirtualPoint.x + CGFloat(move.x), y: remoteVirtualPoint.y + CGFloat(move.y))
+        let target = layoutProvider().screen(at: Int(projected.x.rounded()), Int(projected.y.rounded()))
+        if target?.peerId == localPeerId {
+            pinnedLocalPoint = projected
+            return true
+        }
+        return false
+    }
+
+    private func updateRemotePosition(for frame: KmFrame) {
+        guard frame.type == .mouseMoveRel,
+              let move = try? KmPayload.decodeMouseMove(frame.payload),
+              let point = remoteVirtualPoint
+        else { return }
+        remoteVirtualPoint = CGPoint(x: point.x + CGFloat(move.x), y: point.y + CGFloat(move.y))
     }
 
     private func returnLocal() {
         guard isRemoteActive else { return }
         isRemoteActive = false
         guardController.stop()
-
-        let x = switch direction {
-        case .left: desktopBounds.minX + 4
-        case .right: desktopBounds.maxX - 4
+        if let pinnedLocalPoint {
+            CGWarpMouseCursorPosition(pinnedLocalPoint)
         }
-        CGWarpMouseCursorPosition(CGPoint(x: x, y: Self.currentCursorLocation().y))
+        remoteVirtualPoint = nil
+        pinnedLocalPoint = nil
         log("Returned to Mac")
     }
 
-    private func localPinPoint(localY: CGFloat) -> CGPoint {
-        let x = switch direction {
-        case .left: desktopBounds.minX + 1
-        case .right: desktopBounds.maxX - 1
+    private func remoteNativePoint(for virtualPoint: CGPoint, in layoutScreen: ScreenRect) -> CGPoint {
+        if let native = remoteDisplaysProvider().first(where: { $0.screenId == layoutScreen.screenId }) {
+            let dx = virtualPoint.x - CGFloat(layoutScreen.x)
+            let dy = virtualPoint.y - CGFloat(layoutScreen.y)
+            return CGPoint(x: CGFloat(native.x) + dx, y: CGFloat(native.y) + dy)
         }
-        return CGPoint(x: x, y: min(max(localY, desktopBounds.minY), desktopBounds.maxY - 1))
-    }
-
-    private func peerEntryPoint(localY: CGFloat) -> KmPayload.MouseMove {
-        let maxX = max(peerScreen.width - 1, 0)
-        let maxY = max(peerScreen.height - 1, 0)
-        let x: Int32 = switch direction {
-        case .left: maxX
-        case .right: 0
-        }
-        let normalizedY = desktopBounds.height > 0
-            ? min(max((localY - desktopBounds.minY) / desktopBounds.height, 0), 1)
-            : 0.5
-        let y = Int32((normalizedY * CGFloat(maxY)).rounded())
-        return KmPayload.MouseMove(x: x, y: min(max(y, 0), maxY))
-    }
-
-    private static func currentDesktopBounds() -> CGRect {
-        var count: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &count)
-
-        guard count > 0 else {
-            return CGDisplayBounds(CGMainDisplayID())
-        }
-
-        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        CGGetActiveDisplayList(count, &displays, &count)
-
-        return displays
-            .map { CGDisplayBounds($0) }
-            .reduce(CGRect.null) { $0.union($1) }
+        return CGPoint(
+            x: virtualPoint.x - CGFloat(layoutScreen.x),
+            y: virtualPoint.y - CGFloat(layoutScreen.y)
+        )
     }
 
     private static func currentCursorLocation() -> CGPoint {

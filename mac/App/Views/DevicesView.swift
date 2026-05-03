@@ -4,13 +4,8 @@ struct DevicesView: View {
     @ObservedObject var store: BarelyRealStore
 
     @Binding var peerHost: String
-    @Binding var peerWidth: Int
-    @Binding var peerHeight: Int
-    @Binding var peerSideRaw: String
     @Binding var peerMac: String
     @Binding var peerBroadcast: String
-
-    private var peerSide: PeerSide { PeerSide(rawValue: peerSideRaw) ?? .left }
 
     var body: some View {
         ScrollView {
@@ -18,7 +13,7 @@ struct DevicesView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Devices")
                         .font(.title2.weight(.semibold))
-                    Text("BarelyReal currently supports a single peer. Pairing & discovery are coming soon.")
+                    Text("Arrange every monitor across this Mac and your Windows peer.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -111,6 +106,9 @@ struct DevicesView: View {
                     Text(peerHost.isEmpty ? "No address set" : peerHost)
                         .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
+                    Text(store.remoteScreensStale ? "Last known screens" : "\(store.remoteDisplays.count) screen\(store.remoteDisplays.count == 1 ? "" : "s") synced")
+                        .font(.caption)
+                        .foregroundStyle(store.remoteScreensStale ? .orange : .secondary)
                 }
 
                 Spacer()
@@ -122,13 +120,15 @@ struct DevicesView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 16)
                 LayoutCanvas(
-                    peerSideRaw: $peerSideRaw,
-                    peerWidth: peerWidth,
-                    peerHeight: peerHeight,
-                    macWidth: NSScreen.main?.frame.width ?? 1440,
-                    macHeight: NSScreen.main?.frame.height ?? 900
+                    layout: store.virtualLayout,
+                    localPeerId: store.localPeerId,
+                    remotePeerId: store.remotePeerId,
+                    remoteIsStale: store.remoteScreensStale,
+                    onMoveRemote: { dx, dy, snap in
+                        store.moveRemoteGroup(dx: dx, dy: dy, snap: snap)
+                    }
                 )
-                Text("Drag the Windows screen to either side of your Mac.")
+                Text("Drag the Windows monitor group to any side or corner of your Mac monitors.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -143,21 +143,16 @@ struct DevicesView: View {
                 )
 
                 HStack(alignment: .center, spacing: 12) {
-                    Text("Display size")
+                    Text("Screens")
                         .frame(width: 110, alignment: .leading)
                         .font(.callout)
-                    HStack(spacing: 8) {
-                        TextField("Width", value: $peerWidth, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 100)
-                        Text("×").foregroundStyle(.secondary)
-                        TextField("Height", value: $peerHeight, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 100)
-                        Text("pixels")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
+                    Text("\(store.localDisplays.count) Mac, \(store.remoteDisplays.count) Windows")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        store.refreshDisplays()
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
                     }
                 }
             }
@@ -186,7 +181,7 @@ struct DevicesView: View {
             Label("Coming next", systemImage: "sparkles")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("• mDNS auto-discovery\n• PIN-based pairing with key pinning\n• Multi-device support")
+            Text("• mDNS auto-discovery\n• PIN-based pairing with key pinning\n• More than one remote peer")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

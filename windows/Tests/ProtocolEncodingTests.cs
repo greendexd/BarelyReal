@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.Json;
 using BarelyReal.Core.Clipboard;
 using BarelyReal.Core.Km;
 using BarelyReal.Core.Layout;
@@ -355,6 +356,56 @@ internal static class ProtocolEncodingTests
             Expect.Equal(engine.Screen(2000, 100)?.PeerId, "win");
             Expect.True(engine.Screen(-1, 0) == null, "expected null at (-1,0)");
             Expect.True(engine.Screen(5000, 5000) == null, "expected null at (5000,5000)");
+        });
+
+        TestRunner.Run("screenAnnouncementJsonRoundTrip", () =>
+        {
+            var announcement = new ScreenAnnouncement(
+                "windows",
+                new[]
+                {
+                    new AnnouncedScreen(1, 0, 0, 2560, 1440, 1.0, true),
+                    new AnnouncedScreen(2, 2560, 160, 1920, 1080, 1.0, false),
+                });
+
+            var json = JsonSerializer.Serialize(announcement);
+            Expect.True(json.Contains("\"peer_id\":\"windows\""), "ScreenAnnounce must use peer_id wire key");
+            Expect.True(json.Contains("\"screens\""), "ScreenAnnounce must include screens");
+
+            var decoded = JsonSerializer.Deserialize<ScreenAnnouncement>(json);
+            Expect.Equal(decoded, announcement);
+        });
+
+        TestRunner.Run("layoutSyncUsesWireKeys", () =>
+        {
+            var sync = new LayoutSyncMessage(new[]
+            {
+                new ScreenRect("mac", 7, -2560, 480, 2560, 1440),
+            });
+
+            var json = JsonSerializer.Serialize(sync);
+            Expect.True(json.Contains("\"peer_id\":\"mac\""), "LayoutSync must use peer_id wire key");
+            Expect.True(json.Contains("\"screen_id\":7"), "LayoutSync must use screen_id wire key");
+            Expect.True(json.Contains("\"w\":2560"), "LayoutSync must use compact width key");
+            Expect.True(json.Contains("\"h\":1440"), "LayoutSync must use compact height key");
+
+            var decoded = JsonSerializer.Deserialize<LayoutSyncMessage>(json);
+            Expect.Equal(decoded, sync);
+        });
+
+        TestRunner.Run("layoutTranslatedMovesOnlyPeerGroup", () =>
+        {
+            var winMain = new ScreenRect("windows", 1, 0, 0, 2560, 1440);
+            var winExternal = new ScreenRect("windows", 2, 2560, 0, 1920, 1080);
+            var mac = new ScreenRect("mac", 1, -1728, 240, 1728, 1117);
+            var moved = new Layout(new[] { winMain, winExternal, mac }).Translated("mac", dx: 6400, dy: -400);
+
+            Expect.True(moved.ScreensFor("windows").SequenceEqual(new[] { winMain, winExternal }), "local group moved unexpectedly");
+            Expect.True(moved.ScreensFor("mac").SequenceEqual(new[]
+            {
+                new ScreenRect("mac", 1, 4672, -160, 1728, 1117),
+            }), "remote group did not move by expected delta");
+            Expect.Equal(moved.Bounds("windows"), new ScreenRectBounds(0, 0, 4480, 1440));
         });
 
         TestRunner.Run("displayEnumeratorReturnsLocalLayout", () =>

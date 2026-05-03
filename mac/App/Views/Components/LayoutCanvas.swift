@@ -1,59 +1,31 @@
+import BarelyRealCore
 import SwiftUI
 
-/// Visual layout designer.
-///
-/// Renders two screens (this Mac + the Windows peer) sized proportionally to their pixel
-/// dimensions. The user drags the peer rectangle horizontally; if it ends up to the left of the
-/// Mac it snaps to `.left`, otherwise to `.right`.
+/// Multi-monitor layout editor for the current two-peer dev mode.
 struct LayoutCanvas: View {
-    @Binding var peerSideRaw: String
-    let peerWidth: Int
-    let peerHeight: Int
-    let macWidth: CGFloat
-    let macHeight: CGFloat
+    let layout: BarelyRealCore.Layout
+    let localPeerId: String
+    let remotePeerId: String
+    let remoteIsStale: Bool
+    let onMoveRemote: (_ dx: Int, _ dy: Int, _ snap: Bool) -> Void
 
-    @State private var dragOffset: CGFloat = 0
+    @State private var dragPixels: CGSize = .zero
 
-    private var peerSide: PeerSide { PeerSide(rawValue: peerSideRaw) ?? .left }
-
-    private var macAspect: CGFloat { max(macWidth / max(macHeight, 1), 0.5) }
-    private var peerAspect: CGFloat { max(CGFloat(peerWidth) / max(CGFloat(peerHeight), 1), 0.5) }
+    private var localScreens: [ScreenRect] { layout.screens(peerId: localPeerId) }
+    private var remoteScreens: [ScreenRect] { layout.screens(peerId: remotePeerId) }
+    private var allBounds: ScreenRectBounds? { layout.bounds() }
 
     var body: some View {
         GeometryReader { geo in
-            // Total horizontal pixels combining both screens.
-            let totalPixels = macWidth + CGFloat(peerWidth)
-            let canvasWidth = geo.size.width - 32
-            let canvasHeight: CGFloat = 160
-
-            // Scale so both screens fit; clamp height too.
-            let widthScale = canvasWidth / totalPixels
-            let heightScale = canvasHeight / max(macHeight, CGFloat(peerHeight))
-            let scale = min(widthScale, heightScale, 0.4)
-
-            let macW = macWidth * scale
-            let macH = macHeight * scale
-            let peerW = CGFloat(peerWidth) * scale
-            let peerH = CGFloat(peerHeight) * scale
-
-            let centerX = canvasWidth / 2 + 16
-            let baselineY = (canvasHeight - 1) // align rectangles by their bottom
-
-            // Mac stays centred. Peer rectangle drifts based on side & drag.
-            let macFrame = CGRect(
-                x: centerX - macW / 2,
-                y: canvasHeight - macH,
-                width: macW,
-                height: macH
+            let canvas = CGSize(width: geo.size.width, height: 260)
+            let bounds = paddedBounds(allBounds)
+            let scale = min(
+                (canvas.width - 44) / CGFloat(max(bounds.width, 1)),
+                (canvas.height - 44) / CGFloat(max(bounds.height, 1))
             )
-
-            let peerCenterAtRest: CGFloat = peerSide == .left
-                ? macFrame.minX - peerW / 2 - 8
-                : macFrame.maxX + peerW / 2 + 8
-            let peerCenter = peerCenterAtRest + dragOffset
+            let dragVirtual = CGSize(width: dragPixels.width / max(scale, 0.001), height: dragPixels.height / max(scale, 0.001))
 
             ZStack(alignment: .topLeading) {
-                // Background mat
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color(nsColor: .controlBackgroundColor))
                     .overlay(
@@ -61,89 +33,136 @@ struct LayoutCanvas: View {
                             .stroke(.quaternary, lineWidth: 1)
                     )
 
-                // Floor line
-                Rectangle()
-                    .fill(.tertiary)
-                    .frame(height: 1)
-                    .frame(maxWidth: .infinity)
-                    .position(x: canvasWidth / 2 + 16, y: baselineY + 8)
+                grid(in: canvas)
 
-                // Mac screen
-                ScreenChip(
-                    title: "This Mac",
-                    pixels: "\(Int(macWidth))×\(Int(macHeight))",
-                    accent: .accentColor,
-                    glyph: "laptopcomputer"
-                )
-                .frame(width: macFrame.width, height: macFrame.height)
-                .position(x: macFrame.midX, y: macFrame.midY)
+                ForEach(localScreens, id: \.screenId) { screen in
+                    screenChip(screen, title: screenTitle(screen, fallback: "Mac"), accent: .accentColor, glyph: "display")
+                        .frame(width: CGFloat(screen.width) * scale, height: CGFloat(screen.height) * scale)
+                        .position(position(for: screen, in: canvas, bounds: bounds, scale: scale))
+                }
 
-                // Peer screen
-                ScreenChip(
-                    title: "Windows",
-                    pixels: "\(peerWidth)×\(peerHeight)",
-                    accent: .blue,
-                    glyph: "pc"
-                )
-                .frame(width: peerW, height: peerH)
-                .position(x: peerCenter, y: macFrame.midY)
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            dragOffset = value.translation.width
-                        }
-                        .onEnded { value in
-                            let projectedCenter = peerCenterAtRest + value.translation.width
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                dragOffset = 0
-                                peerSideRaw = (projectedCenter < macFrame.midX ? PeerSide.left : .right).rawValue
-                            }
-                        }
-                )
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: peerSideRaw)
+                ForEach(remoteScreens, id: \.screenId) { screen in
+                    let moved = ScreenRect(
+                        peerId: screen.peerId,
+                        screenId: screen.screenId,
+                        x: screen.x + Int(dragVirtual.width.rounded()),
+                        y: screen.y + Int(dragVirtual.height.rounded()),
+                        width: screen.width,
+                        height: screen.height
+                    )
+                    screenChip(moved, title: screenTitle(screen, fallback: "Windows"), accent: remoteIsStale ? .orange : .blue, glyph: "pc")
+                        .frame(width: CGFloat(screen.width) * scale, height: CGFloat(screen.height) * scale)
+                        .position(position(for: moved, in: canvas, bounds: bounds, scale: scale))
+                }
+
+                if remoteScreens.isEmpty {
+                    emptyRemoteState
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
-            .frame(width: geo.size.width, height: canvasHeight + 16)
+            .gesture(remoteDrag(scale: scale))
         }
-        .frame(height: 180)
+        .frame(height: 260)
     }
-}
 
-private struct ScreenChip: View {
-    let title: String
-    let pixels: String
-    let accent: Color
-    let glyph: String
+    private func remoteDrag(scale: CGFloat) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard !remoteScreens.isEmpty else { return }
+                dragPixels = value.translation
+            }
+            .onEnded { value in
+                guard !remoteScreens.isEmpty else { return }
+                let dx = Int((value.translation.width / max(scale, 0.001)).rounded())
+                let dy = Int((value.translation.height / max(scale, 0.001)).rounded())
+                dragPixels = .zero
+                onMoveRemote(dx, dy, true)
+            }
+    }
 
-    var body: some View {
+    private func paddedBounds(_ bounds: ScreenRectBounds?) -> ScreenRectBounds {
+        let bounds = bounds ?? ScreenRectBounds(minX: 0, minY: 0, maxX: 1440, maxY: 900)
+        let padX = max(bounds.width / 8, 240)
+        let padY = max(bounds.height / 8, 160)
+        return ScreenRectBounds(minX: bounds.minX - padX, minY: bounds.minY - padY, maxX: bounds.maxX + padX, maxY: bounds.maxY + padY)
+    }
+
+    private func position(for screen: ScreenRect, in canvas: CGSize, bounds: ScreenRectBounds, scale: CGFloat) -> CGPoint {
+        let x = CGFloat(screen.x - bounds.minX) * scale + CGFloat(screen.width) * scale / 2 + 22
+        let y = CGFloat(screen.y - bounds.minY) * scale + CGFloat(screen.height) * scale / 2 + 22
+        return CGPoint(x: x, y: y)
+    }
+
+    private func screenChip(_ screen: ScreenRect, title: String, accent: Color, glyph: String) -> some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(LinearGradient(
-                    colors: [accent.opacity(0.18), accent.opacity(0.10)],
+                    colors: [accent.opacity(0.18), accent.opacity(0.08)],
                     startPoint: .top,
                     endPoint: .bottom
                 ))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(accent.opacity(0.45), lineWidth: 1.2)
+                        .stroke(accent.opacity(0.55), lineWidth: 1.2)
                 )
 
             Image(systemName: glyph)
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(accent.opacity(0.55))
+                .foregroundStyle(accent.opacity(0.62))
                 .symbolRenderingMode(.hierarchical)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.caption.weight(.semibold))
-                Text(pixels)
+                    .lineLimit(1)
+                Text("\(screen.width)×\(screen.height)  \(screen.x),\(screen.y)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .lineLimit(1)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 6)
         }
         .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 2)
+    }
+
+    private func screenTitle(_ screen: ScreenRect, fallback: String) -> String {
+        "\(fallback) \(screen.screenId)"
+    }
+
+    private var emptyRemoteState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "display.trianglebadge.exclamationmark")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text("Waiting for Windows screens")
+                .font(.callout.weight(.semibold))
+            Text("Start BarelyReal on Windows with the same control port.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func grid(in canvas: CGSize) -> some View {
+        Canvas { context, size in
+            var path = Path()
+            let spacing: CGFloat = 32
+            var x: CGFloat = 0
+            while x <= size.width {
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: size.height))
+                x += spacing
+            }
+            var y: CGFloat = 0
+            while y <= size.height {
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+                y += spacing
+            }
+            context.stroke(path, with: .color(.secondary.opacity(0.08)), lineWidth: 1)
+        }
+        .frame(width: canvas.width, height: canvas.height)
     }
 }

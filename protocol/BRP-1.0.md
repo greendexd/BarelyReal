@@ -13,7 +13,11 @@ All multi-byte integers are **little-endian**.
 | Clipboard  | TCP+TLS 24800   | Clipboard contents (text/html/image/RTF). Sub-stream of control.   |
 | Files      | TCP+TLS 24800   | File transfer chunks for drag&drop. Sub-stream of control.         |
 
-The **control connection** is a single TLS 1.3 stream multiplexed by message type. KM is a separate UDP socket with its own AEAD layer (see § Security).
+The target **control connection** is a single TLS 1.3 stream multiplexed by message type. KM is a separate UDP socket with its own AEAD layer (see § Security).
+
+Implementation note: the current dev build already uses this control framing on TCP `24800`,
+but it is still clear TCP while TLS/PIN pairing is being finished. The dev channel is used for
+`Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 
 ## Discovery
 
@@ -59,7 +63,7 @@ struct ControlFrame {
 | 0x02  | LayoutSync          | `{"layout":[{"peer_id","screen_id","x","y","w","h"}, …]}`            |
 | 0x03  | RoleSwitch          | `{"new_server":"<peer-id>"}`                                         |
 | 0x04  | OwnershipTransfer   | `{"target_screen","entry_x","entry_y","drag":bool}`                  |
-| 0x05  | ScreenAnnounce      | `{"screens":[{"id","x","y","w","h","scale"}, …]}`                    |
+| 0x05  | ScreenAnnounce      | `{"peer_id","screens":[{"id","x","y","w","h","scale","primary"}, …]}` |
 | 0x06  | WakeOnLanRequest    | `{"mac":"AA:BB:CC:DD:EE:FF","broadcast":"192.168.1.255"}`            |
 | 0x07  | Hotkey              | `{"id":"force_switch"}`                                              |
 | 0x10  | ClipboardOffer      | `{"id":u64,"formats":["text/plain","image/png", …]}`                 |

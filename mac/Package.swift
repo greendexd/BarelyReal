@@ -18,7 +18,8 @@ let package = Package(
         .executableTarget(
             name: "BarelyReal",
             dependencies: ["BarelyRealCore"],
-            path: "App"
+            path: "App",
+            exclude: ["Resources"]
         ),
         .executableTarget(
             name: "BarelyRealKmSmoke",

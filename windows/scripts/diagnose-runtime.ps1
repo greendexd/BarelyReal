@@ -1,4 +1,5 @@
 param(
+    [int]$ControlPort = 24800,
     [int]$KmPort = 24801,
     [int]$ClipboardPort = 24802
 )
@@ -32,6 +33,12 @@ Get-Process |
     Format-Table -AutoSize
 
 Write-Host ""
+Write-Host "Listening TCP ${ControlPort}:" -ForegroundColor Cyan
+Get-NetTCPConnection -LocalPort $ControlPort -State Listen -ErrorAction SilentlyContinue |
+    Select-Object LocalAddress, LocalPort, State, OwningProcess |
+    Format-Table -AutoSize
+
+Write-Host ""
 Write-Host "Listening UDP ${KmPort}:" -ForegroundColor Cyan
 Get-NetUDPEndpoint -LocalPort $KmPort -ErrorAction SilentlyContinue |
     Select-Object LocalAddress, LocalPort, OwningProcess |
@@ -57,6 +64,7 @@ Write-Host ""
 Write-Host "Expected for Mac -> Windows:" -ForegroundColor Cyan
 Write-Host "- Windows app mode: Mac -> Windows"
 Write-Host "- App status: Running"
+Write-Host "- TCP $ControlPort is listening for screen/layout sync"
 Write-Host "- UDP $KmPort is listening"
 Write-Host "- Firewall allows inbound UDP $KmPort"
 Write-Host "- Mac peer IP is one of the Windows Wi-Fi/LAN IPv4 addresses above, not VPN"

@@ -26,13 +26,29 @@ final class BarelyRealStore: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var logLines: [String] = []
     @Published private(set) var clipboardEntries: [ClipboardEntry] = []
+    @Published private(set) var localDisplays: [DisplayInfo] = []
+    @Published private(set) var remoteDisplays: [DisplayInfo] = []
+    @Published private(set) var virtualLayout = Layout(screens: [])
+    @Published private(set) var controlRunning = false
+    @Published private(set) var remoteScreensStale = true
     @Published var permissionRefreshToken = UUID()
     @Published var lockOnDisconnect = false
+
+    let localPeerId = "mac"
+    let remotePeerId = "windows"
 
     private let history = ClipboardHistory()
     private var kmSession: MacKmSession?
     private var receiverSession: MacReceiverSession?
     private var clipboardSession: ClipboardTextSession?
+    private var controlSession: DevControlSession?
+    private var keepAliveTimer: Timer?
+
+    init() {
+        refreshDisplays()
+        loadLayoutState()
+        reconcileLayout()
+    }
 
     var accessibilityGranted: Bool {
         _ = permissionRefreshToken
@@ -56,8 +72,10 @@ final class BarelyRealStore: ObservableObject {
 
         switch settings.mode {
         case .sendToWindows:
+            startControl(settings: settings)
             startKm(settings: settings)
         case .receiveFromWindows:
+            startControl(settings: settings)
             startReceiver(settings: settings)
         }
         startClipboard(settings: settings)
@@ -76,6 +94,12 @@ final class BarelyRealStore: ObservableObject {
         clipboardSession?.stop()
         clipboardSession = nil
         clipboardRunning = false
+
+        keepAliveTimer?.invalidate()
+        keepAliveTimer = nil
+        controlSession?.close()
+        controlSession = nil
+        controlRunning = false
 
         appendLog("Stopped")
     }
@@ -180,13 +204,17 @@ final class BarelyRealStore: ObservableObject {
 
     private func startKm(settings: ConnectionSettings) {
         kmSession?.stop()
+        refreshDisplays()
+        reconcileLayout()
 
         do {
             let session = MacKmSession(
                 peerHost: settings.peerHost,
                 peerPort: UInt16(settings.kmPort),
-                direction: settings.peerSide.direction,
-                peerScreen: PeerScreen(width: Int32(settings.peerWidth), height: Int32(settings.peerHeight)),
+                localPeerId: localPeerId,
+                remotePeerId: remotePeerId,
+                layoutProvider: { [weak self] in self?.virtualLayout ?? Layout(screens: []) },
+                remoteDisplaysProvider: { [weak self] in self?.remoteDisplays ?? [] },
                 scrollSpeed: settings.scrollSpeed
             ) { [weak self] message in
                 Task { @MainActor in self?.appendLog(message) }
@@ -195,11 +223,173 @@ final class BarelyRealStore: ObservableObject {
             try session.start()
             kmSession = session
             kmRunning = true
-            appendLog("KM started: \(settings.peerHost):\(settings.kmPort), \(settings.peerSide.title), scroll \(settings.scrollSpeed)/20")
+            appendLog("KM started: \(settings.peerHost):\(settings.kmPort), layout screens \(virtualLayout.screens.count), scroll \(settings.scrollSpeed)/20")
         } catch {
             kmRunning = false
             lastError = "KM start failed: \(error)"
             appendLog(lastError ?? "KM start failed")
+        }
+    }
+
+    private func startControl(settings: ConnectionSettings) {
+        controlSession?.close()
+        keepAliveTimer?.invalidate()
+
+        let session = DevControlSession()
+        session.onLog = { [weak self] message in
+            Task { @MainActor in self?.appendLog(message) }
+        }
+        session.onScreenAnnounce = { [weak self] announcement in
+            Task { @MainActor in self?.applyRemoteAnnouncement(announcement) }
+        }
+        session.onLayoutSync = { [weak self] message in
+            Task { @MainActor in self?.applyRemoteLayout(message) }
+        }
+
+        do {
+            try session.start(localPort: UInt16(settings.controlPort), peerHost: settings.peerHost, peerPort: UInt16(settings.controlPort))
+            controlSession = session
+            controlRunning = true
+            sendControlSnapshot()
+            keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak session] _ in
+                session?.sendKeepAlive()
+            }
+        } catch {
+            controlRunning = false
+            lastError = "Control start failed: \(error)"
+            appendLog(lastError ?? "Control start failed")
+        }
+    }
+
+    func refreshDisplays() {
+        localDisplays = DisplayEnumerator.localDisplays(peerId: localPeerId)
+    }
+
+    func moveRemoteGroup(dx: Int, dy: Int, snap: Bool) {
+        guard virtualLayout.bounds(peerId: remotePeerId) != nil else { return }
+        var next = virtualLayout.translated(peerId: remotePeerId, dx: dx, dy: dy)
+        if snap {
+            next = snappedRemoteLayout(next)
+        }
+        virtualLayout = next
+        saveLayoutState()
+        controlSession?.sendLayoutSync(.init(layout: virtualLayout.screens))
+        appendLog("Layout updated: \(remotePeerId) moved")
+    }
+
+    private func sendControlSnapshot() {
+        refreshDisplays()
+        let screens = localDisplays.map(AnnouncedScreen.init(display:))
+        controlSession?.sendHello(.init(name: Host.current().localizedName ?? "Mac", os: "macOS", ver: "0.1.0", screens: screens))
+        controlSession?.sendScreenAnnounce(.init(peerId: localPeerId, screens: screens))
+        controlSession?.sendLayoutSync(.init(layout: virtualLayout.screens))
+    }
+
+    private func applyRemoteAnnouncement(_ announcement: ScreenAnnouncement) {
+        guard announcement.peerId != localPeerId else { return }
+        remoteDisplays = announcement.screens.map { $0.displayInfo(peerId: remotePeerId) }
+        remoteScreensStale = false
+        reconcileLayout()
+        saveLayoutState()
+        appendLog("Peer screens updated: \(remoteDisplays.count)")
+    }
+
+    private func applyRemoteLayout(_ message: LayoutSyncMessage) {
+        refreshDisplays()
+        let incoming = Layout(screens: message.layout)
+        let localNative = localDisplays.map(\.screenRect)
+        guard let incomingLocal = incoming.bounds(peerId: localPeerId),
+              let nativeLocal = Layout(screens: localNative).bounds(peerId: localPeerId)
+        else {
+            virtualLayout = Layout(screens: localNative + incoming.screens(peerId: remotePeerId))
+            saveLayoutState()
+            return
+        }
+
+        let dx = nativeLocal.minX - incomingLocal.minX
+        let dy = nativeLocal.minY - incomingLocal.minY
+        let translatedRemote = incoming.screens(peerId: remotePeerId).map {
+            ScreenRect(peerId: $0.peerId, screenId: $0.screenId, x: $0.x + dx, y: $0.y + dy, width: $0.width, height: $0.height)
+        }
+        virtualLayout = Layout(screens: localNative + translatedRemote)
+        saveLayoutState()
+        appendLog("Layout synced from peer")
+    }
+
+    private func reconcileLayout() {
+        refreshDisplays()
+        let localScreens = localDisplays.map(\.screenRect)
+        let remoteScreens = remoteDisplays.map(\.screenRect)
+        guard !localScreens.isEmpty else {
+            virtualLayout = Layout(screens: remoteScreens)
+            return
+        }
+        guard !remoteScreens.isEmpty else {
+            virtualLayout = Layout(screens: localScreens + virtualLayout.screens(peerId: remotePeerId))
+            return
+        }
+
+        let existingRemote = virtualLayout.screens(peerId: remotePeerId)
+        let remoteIds = Set(remoteScreens.map(\.screenId))
+        if !existingRemote.isEmpty, Set(existingRemote.map(\.screenId)) == remoteIds {
+            let existingById = Dictionary(uniqueKeysWithValues: existingRemote.map { ($0.screenId, $0) })
+            let updatedRemote = remoteScreens.map { native in
+                if let existing = existingById[native.screenId] {
+                    return ScreenRect(peerId: remotePeerId, screenId: native.screenId, x: existing.x, y: existing.y, width: native.width, height: native.height)
+                }
+                return native
+            }
+            virtualLayout = Layout(screens: localScreens + updatedRemote)
+            return
+        }
+
+        let localBounds = Layout(screens: localScreens).bounds(peerId: localPeerId)
+        let remoteBounds = Layout(screens: remoteScreens).bounds(peerId: remotePeerId)
+        guard let localBounds, let remoteBounds else {
+            virtualLayout = Layout(screens: localScreens + remoteScreens)
+            return
+        }
+
+        let dx = localBounds.minX - remoteBounds.maxX
+        let dy = localBounds.minY - remoteBounds.minY
+        let translatedRemote = remoteScreens.map {
+            ScreenRect(peerId: remotePeerId, screenId: $0.screenId, x: $0.x + dx, y: $0.y + dy, width: $0.width, height: $0.height)
+        }
+        virtualLayout = Layout(screens: localScreens + translatedRemote)
+    }
+
+    private func snappedRemoteLayout(_ layout: Layout) -> Layout {
+        guard let local = layout.bounds(peerId: localPeerId),
+              let remote = layout.bounds(peerId: remotePeerId)
+        else { return layout }
+
+        let candidates: [(dx: Int, dy: Int, distance: Int)] = [
+            (local.minX - remote.maxX, 0, abs(local.minX - remote.maxX)),
+            (local.maxX - remote.minX, 0, abs(local.maxX - remote.minX)),
+            (0, local.minY - remote.maxY, abs(local.minY - remote.maxY)),
+            (0, local.maxY - remote.minY, abs(local.maxY - remote.minY)),
+        ]
+        guard let best = candidates.min(by: { $0.distance < $1.distance }) else { return layout }
+        return layout.translated(peerId: remotePeerId, dx: best.dx, dy: best.dy)
+    }
+
+    private func saveLayoutState() {
+        guard let data = try? JSONEncoder().encode(virtualLayout),
+              let remoteData = try? JSONEncoder().encode(remoteDisplays)
+        else { return }
+        UserDefaults.standard.set(data, forKey: "layout.virtual")
+        UserDefaults.standard.set(remoteData, forKey: "layout.remoteDisplays")
+    }
+
+    private func loadLayoutState() {
+        if let data = UserDefaults.standard.data(forKey: "layout.virtual"),
+           let layout = try? JSONDecoder().decode(Layout.self, from: data) {
+            virtualLayout = layout
+        }
+        if let data = UserDefaults.standard.data(forKey: "layout.remoteDisplays"),
+           let displays = try? JSONDecoder().decode([DisplayInfo].self, from: data) {
+            remoteDisplays = displays
+            remoteScreensStale = !displays.isEmpty
         }
     }
 
@@ -269,11 +459,9 @@ final class BarelyRealStore: ObservableObject {
 
 struct ConnectionSettings {
     var peerHost: String
+    var controlPort: Int
     var kmPort: Int
     var clipboardPort: Int
-    var peerSide: PeerSide
-    var peerWidth: Int
-    var peerHeight: Int
     var scrollSpeed: Int
     var mode: MacKmMode = .sendToWindows
 }

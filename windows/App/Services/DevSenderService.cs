@@ -1,4 +1,5 @@
 using BarelyReal.Core.Km;
+using BarelyReal.Core.Layout;
 using BarelyReal.Core.Network;
 using BarelyReal.Core.Protocol;
 
@@ -25,7 +26,13 @@ internal sealed class DevSenderService : IDisposable
     public ushort PeerPort { get; private set; }
     public int FramesSent { get; private set; }
 
-    public void Start(string peerHost, ushort peerPort, WindowsEdgeBridge.Direction direction, int peerWidth, int peerHeight)
+    public void Start(
+        string peerHost,
+        ushort peerPort,
+        string localPeerId,
+        string remotePeerId,
+        Func<Layout> layoutProvider,
+        Func<IReadOnlyList<DisplayInfo>> remoteDisplaysProvider)
     {
         lock (_gate)
         {
@@ -38,7 +45,7 @@ internal sealed class DevSenderService : IDisposable
             _lastFrameSentAt = DateTime.MinValue;
 
             _stream = new UdpKmStream();
-            _bridge = new WindowsEdgeBridge(direction, new WindowsEdgeBridge.PeerScreen(peerWidth, peerHeight), _stream, PeerHost, PeerPort)
+            _bridge = new WindowsEdgeBridge(localPeerId, remotePeerId, layoutProvider, remoteDisplaysProvider, _stream, PeerHost, PeerPort)
             {
                 Log = Log
             };
@@ -59,7 +66,7 @@ internal sealed class DevSenderService : IDisposable
                     Log("Force-switch hotkey could not be registered (already in use?).");
 
                 IsRunning = true;
-                Log($"Sending KM frames to {PeerHost}:{PeerPort} ({direction}). {peerWidth}x{peerHeight} Mac display assumed.");
+                Log($"Sending KM frames to {PeerHost}:{PeerPort} using synced layout.");
                 StatsChanged?.Invoke();
             }
             catch

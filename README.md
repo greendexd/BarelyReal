@@ -30,43 +30,50 @@ See:
 Implemented so far:
 - BRP frame codecs on macOS + Windows with shared byte fixtures.
 - KM payload helpers on macOS + Windows.
-- Launchable macOS controller app with KM edge mode, side/size settings, scroll speed, permission checks, and clipboard test buttons.
+- Launchable macOS controller app with KM edge mode, multi-monitor layout editor, scroll speed, permission checks, and clipboard test buttons.
 - Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition.
 - Text, PNG, and file clipboard sync over TCP port `24802`.
+- Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
 - PIN lockout + pinned-peer identity store scaffold for pairing.
 - Wake-on-LAN packet sender.
 - Local clipboard history store (JSON MVP, storage API can move to SQLite later).
-- Multi-monitor display enumeration foundation for the layout editor.
+- Multi-monitor display enumeration and synced virtual layout for macOS + Windows screen groups.
+- Branded Cursor Bridge icon for macOS `.app` and Windows WPF app.
 
 ## Building
 
-## Run a Minimal Mac → Windows Dev Bridge
+## Run the Current Dev Bridge
 
-This is the current working path. It is raw UDP dev mode, not the final secure app flow.
+This is the current working path. KM still uses raw UDP dev mode, and control/layout sync uses
+clear TCP dev mode. TLS/PIN security is the next hardening step.
 
 1. On Windows, unzip/copy the project and run:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File windows/scripts/verify.ps1
+   powershell -ExecutionPolicy Bypass -File windows/scripts/allow-firewall.ps1
    dotnet run --project windows/App/BarelyReal.App.csproj
    ```
 
 2. Find the Windows machine IP, for example with `ipconfig`.
 
-3. On Mac:
+3. On Mac, install or launch the app:
 
    ```sh
-   cd mac
-   swift run BarelyRealKmSmoke send <windows-ip> 24801 0 --peer-left --peer-size 1920x1080
+   ./mac/scripts/install_app.sh
+   open /Applications/BarelyReal.app
    ```
 
-4. Move the Mac cursor to the left edge of the Mac screen. Control should enter Windows.
-   Move right past the Windows edge to return to Mac.
-   Stop with `Ctrl+C` on both machines.
+4. Enter the Windows Wi-Fi IP in the Mac app. Both apps exchange all local screens on TCP `24800`.
+   The Devices page shows every monitor in one virtual layout.
 
-`send` defaults to edge mode. Use `--peer-left` when Windows is left of the Mac, `--peer-right` when Windows is right of the Mac. Use `--remote` to give Windows control immediately, or `--mirror` only for debugging.
-The macOS app is the preferred controller now; the CLI remains useful for smoke tests.
+5. Drag the peer screen group in Devices to the real physical position: left, right, top,
+   bottom, or a corner/offset. Moving the cursor across a matching physical edge transfers
+   control to the other machine.
+
+The old `BarelyRealKmSmoke` CLI remains useful for smoke tests, but the app UI is now the
+preferred controller.
 
 If capture prints no frames on Mac, grant Accessibility permission to the terminal/Codex app in System Settings.
 
@@ -115,6 +122,7 @@ cd windows
 dotnet build BarelyReal.sln
 dotnet run --project Tests   # runs the protocol-codec test suite (mirrors the macOS suite)
 dotnet run --project App     # starts the dev receiver UI
+powershell -ExecutionPolicy Bypass -File scripts/allow-firewall.ps1
 ```
 
 The `windows/Tests/` and `mac/Tests/` suites share cross-platform byte fixtures

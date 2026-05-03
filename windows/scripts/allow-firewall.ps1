@@ -1,4 +1,5 @@
 param(
+    [int]$ControlPort = 24800,
     [int]$KmPort = 24801,
     [int]$ClipboardPort = 24802,
     [ValidateSet("Private", "Domain", "Public", "Any")]
@@ -21,6 +22,7 @@ if (-not (Test-IsAdmin)) {
 }
 
 $rules = @(
+    @{ Name = "BarelyReal Control TCP $ControlPort"; Protocol = "TCP"; Port = $ControlPort },
     @{ Name = "BarelyReal KM UDP $KmPort"; Protocol = "UDP"; Port = $KmPort },
     @{ Name = "BarelyReal Clipboard TCP $ClipboardPort"; Protocol = "TCP"; Port = $ClipboardPort }
 )

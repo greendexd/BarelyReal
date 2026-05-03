@@ -23,6 +23,7 @@ mac/.build/
 mac/.swiftpm/
 mac/DerivedData/
 mac/dist/
+mac/App/Resources/*.iconset/
 *.xcodeproj/
 Package.resolved
 
