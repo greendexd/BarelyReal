@@ -3,9 +3,37 @@ using BarelyReal.Core.Layout;
 
 namespace BarelyReal.Core.Network;
 
-public sealed record ScreenAnnouncement(
-    [property: JsonPropertyName("peer_id")] string PeerId,
-    [property: JsonPropertyName("screens")] IReadOnlyList<AnnouncedScreen> Screens);
+public sealed class ScreenAnnouncement : IEquatable<ScreenAnnouncement>
+{
+    [JsonPropertyName("peer_id")]
+    public string PeerId { get; }
+
+    [JsonPropertyName("screens")]
+    public IReadOnlyList<AnnouncedScreen> Screens { get; }
+
+    [JsonConstructor]
+    public ScreenAnnouncement(string peerId, IReadOnlyList<AnnouncedScreen> screens)
+    {
+        PeerId = peerId;
+        Screens = screens.ToArray();
+    }
+
+    public bool Equals(ScreenAnnouncement? other) =>
+        other is not null
+        && PeerId == other.PeerId
+        && Screens.SequenceEqual(other.Screens);
+
+    public override bool Equals(object? obj) => obj is ScreenAnnouncement other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(PeerId);
+        foreach (var screen in Screens)
+            hash.Add(screen);
+        return hash.ToHashCode();
+    }
+}
 
 public sealed record AnnouncedScreen(
     [property: JsonPropertyName("id")] int Id,
@@ -23,8 +51,31 @@ public sealed record AnnouncedScreen(
         new(peerId, Id, X, Y, W, H, Scale, Primary);
 }
 
-public sealed record LayoutSyncMessage(
-    [property: JsonPropertyName("layout")] IReadOnlyList<ScreenRect> Layout);
+public sealed class LayoutSyncMessage : IEquatable<LayoutSyncMessage>
+{
+    [JsonPropertyName("layout")]
+    public IReadOnlyList<ScreenRect> Layout { get; }
+
+    [JsonConstructor]
+    public LayoutSyncMessage(IReadOnlyList<ScreenRect> layout)
+    {
+        Layout = layout.ToArray();
+    }
+
+    public bool Equals(LayoutSyncMessage? other) =>
+        other is not null
+        && Layout.SequenceEqual(other.Layout);
+
+    public override bool Equals(object? obj) => obj is LayoutSyncMessage other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var screen in Layout)
+            hash.Add(screen);
+        return hash.ToHashCode();
+    }
+}
 
 public sealed record HelloMessage(
     [property: JsonPropertyName("name")] string Name,
