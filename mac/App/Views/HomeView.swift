@@ -44,7 +44,11 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ModeSwitcher(mode: modeBinding)
+                ModeSwitcher(
+                    mode: modeBinding,
+                    isRunning: isRunning,
+                    onModeWillChange: onStop
+                )
 
                 StatusHero(
                     state: heroState,
@@ -72,7 +76,8 @@ struct HomeView: View {
                     ReceiveQuickPanel(
                         kmPort: kmPort,
                         clipboardPort: clipboardPort,
-                        clipboardPeer: peerHost
+                        clipboardPeer: peerHost,
+                        isRunning: store.kmRunning
                     )
                 }
 
@@ -104,11 +109,17 @@ struct HomeView: View {
 
 private struct ModeSwitcher: View {
     @Binding var mode: MacKmMode
+    let isRunning: Bool
+    let onModeWillChange: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(MacKmMode.allCases) { option in
                 Button {
+                    guard option != mode else { return }
+                    if isRunning {
+                        onModeWillChange()
+                    }
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         mode = option
                     }
@@ -200,9 +211,10 @@ private struct ReceiveQuickPanel: View {
     let kmPort: Int
     let clipboardPort: Int
     let clipboardPeer: String
+    let isRunning: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .foregroundStyle(.secondary)
@@ -214,6 +226,17 @@ private struct ReceiveQuickPanel: View {
                 detail(icon: "keyboard", title: "Keyboard & mouse", value: "UDP \(kmPort)")
                 detail(icon: "doc.on.clipboard", title: "Clipboard peer", value: clipboardPeer.isEmpty ? "—" : clipboardPeer)
             }
+
+            Divider()
+
+            Label(
+                isRunning
+                    ? "Now start Windows in “Windows → Mac” mode and enter this Mac IP there."
+                    : "Press Start here first, then start Windows in “Windows → Mac” mode.",
+                systemImage: isRunning ? "checkmark.circle" : "play.circle"
+            )
+            .font(.caption)
+            .foregroundStyle(isRunning ? .green : .secondary)
         }
         .padding(20)
         .background(Color(nsColor: .controlBackgroundColor),
