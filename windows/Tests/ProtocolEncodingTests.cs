@@ -346,6 +346,47 @@ internal static class ProtocolEncodingTests
             Expect.True(decoded.Equals(bundle), "decode mismatch");
         });
 
+        TestRunner.Run("inputInjectorMapsMacSpecialKeysToWindowsScanCodes", () =>
+        {
+            var injector = new InputInjector();
+
+            var printScreen = injector.TranslateKeyForInjection(0x69); // Mac F13 / PC Print Screen
+            Expect.Equal(printScreen.ScanCode, (ushort)0x37);
+            Expect.True(printScreen.IsExtended, "Print Screen must be sent as E0 37, not keypad multiply");
+
+            var insert = injector.TranslateKeyForInjection(0x72); // Mac Help / Insert
+            Expect.Equal(insert.ScanCode, (ushort)0x52);
+            Expect.True(insert.IsExtended, "Insert must be sent as E0 52, not keypad 0");
+
+            var home = injector.TranslateKeyForInjection(0x73);
+            Expect.Equal(home.ScanCode, (ushort)0x47);
+            Expect.True(home.IsExtended, "Home must be sent as E0 47, not keypad 7");
+
+            var f1 = injector.TranslateKeyForInjection(0x7A);
+            Expect.Equal(f1.ScanCode, (ushort)0x3B);
+            Expect.True(!f1.IsExtended, "F1 is not an extended scan code");
+
+            var keypadMultiply = injector.TranslateKeyForInjection(0x43);
+            Expect.Equal(keypadMultiply.ScanCode, (ushort)0x37);
+            Expect.True(!keypadMultiply.IsExtended, "keypad multiply must stay non-extended");
+
+            var commandAsCtrl = injector.TranslateKeyForInjection(0x37);
+            Expect.Equal(commandAsCtrl.ScanCode, (ushort)0x1D);
+            Expect.True(!commandAsCtrl.IsExtended, "default Cmd->Ctrl remap should use left control");
+
+            injector.Remap.CmdToCtrl = false;
+            var commandAsWin = injector.TranslateKeyForInjection(0x37);
+            Expect.Equal(commandAsWin.ScanCode, (ushort)0x5B);
+            Expect.True(commandAsWin.IsExtended, "disabled Cmd->Ctrl remap should preserve the Windows key");
+        });
+
+        TestRunner.Run("lowLevelHooksPreserveExtendedScanCodesForWire", () =>
+        {
+            Expect.Equal(LowLevelHooks.EncodeKeyboardScanCodeForWire(0x37, 0x01), (ushort)0xE037); // Print Screen
+            Expect.Equal(LowLevelHooks.EncodeKeyboardScanCodeForWire(0x37, 0x00), (ushort)0x0037); // Keypad *
+            Expect.Equal(LowLevelHooks.EncodeKeyboardScanCodeForWire(0x52, 0x01), (ushort)0xE052); // Insert
+        });
+
         TestRunner.Run("layoutEngineFindsContainingScreen", () =>
         {
             var mac = new ScreenRect("mac", 0, 0, 0, 1920, 1080);

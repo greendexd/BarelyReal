@@ -7,6 +7,8 @@ namespace BarelyReal.Core.Km;
 /// Applies the modifier remap table (Cmd↔Ctrl, Option↔Alt) before posting.
 public sealed class InputInjector
 {
+    public readonly record struct KeyInjection(ushort ScanCode, bool IsExtended);
+
     public sealed class ModifierRemap
     {
         public bool CmdToCtrl { get; set; } = true;
@@ -104,9 +106,9 @@ public sealed class InputInjector
 
     private void SendKey(KmPayload.Key key, bool isDown)
     {
-        var scanCode = RemapScanCode(key.KeyCode);
+        var mapped = TranslateKeyForInjection(key.KeyCode);
         var flags = KEYEVENTF_SCANCODE | (isDown ? 0 : KEYEVENTF_KEYUP);
-        if (IsExtendedKey(key.KeyCode, scanCode))
+        if (mapped.IsExtended)
             flags |= KEYEVENTF_EXTENDEDKEY;
 
         var input = new INPUT
@@ -116,7 +118,7 @@ public sealed class InputInjector
             {
                 ki = new KEYBDINPUT
                 {
-                    wScan = scanCode,
+                    wScan = mapped.ScanCode,
                     dwFlags = flags
                 }
             }
@@ -125,21 +127,27 @@ public sealed class InputInjector
         Send(input);
     }
 
-    private ushort RemapScanCode(ushort scanCode)
+    public KeyInjection TranslateKeyForInjection(ushort keyCode)
     {
-        scanCode = NormalizeScanCode(scanCode);
+        if (AssumeMacVirtualKeyCodes && !IsExtendedScanCode(keyCode))
+        {
+            if (Remap.CmdToCtrl && (keyCode == MacLeftCommand || keyCode == MacRightCommand))
+                return new KeyInjection(WindowsLeftControl, IsExtended: false);
 
-        if (Remap.CmdToCtrl && (scanCode == MacLeftCommand || scanCode == MacRightCommand))
-            return WindowsLeftControl;
+            if (Remap.OptionToAlt && (keyCode == MacLeftOption || keyCode == MacRightOption))
+                return new KeyInjection(WindowsLeftAlt, IsExtended: false);
+        }
 
-        if (Remap.OptionToAlt && (scanCode == MacLeftOption || scanCode == MacRightOption))
-            return WindowsLeftAlt;
+        var scanCode = NormalizeScanCode(keyCode);
 
-        return scanCode;
+        return new KeyInjection(BaseScanCode(scanCode), IsExtendedScanCode(scanCode));
     }
 
     private ushort NormalizeScanCode(ushort keyCode)
     {
+        if (IsExtendedScanCode(keyCode))
+            return keyCode;
+
         if (!AssumeMacVirtualKeyCodes)
             return keyCode;
 
@@ -201,30 +209,63 @@ public sealed class InputInjector
             0x32 => 0x29, // `
             0x33 => 0x0E, // Backspace
             0x35 => 0x01, // Escape
-            0x36 => WindowsLeftControl, // Right Command -> Ctrl
-            0x37 => WindowsLeftControl, // Command -> Ctrl
+            0x36 => Extended(0x5C), // Right Command -> Right Windows key if remap is disabled
+            0x37 => Extended(0x5B), // Command -> Left Windows key if remap is disabled
             0x38 => 0x2A, // Left Shift
             0x39 => 0x3A, // Caps Lock
             0x3A => WindowsLeftAlt,
             0x3B => WindowsLeftControl,
             0x3C => 0x36, // Right Shift
-            0x3D => WindowsLeftAlt,
-            0x3E => 0x1D, // Right Control
-            0x73 => 0x47, // Home
-            0x74 => 0x49, // Page Up
-            0x75 => 0x53, // Forward Delete
-            0x77 => 0x4F, // End
-            0x79 => 0x51, // Page Down
-            0x7B => 0x4B, // Left
-            0x7C => 0x4D, // Right
-            0x7D => 0x50, // Down
-            0x7E => 0x48, // Up
+            0x3D => Extended(0x38), // Right Option / Alt
+            0x3E => Extended(0x1D), // Right Control
+            0x41 => 0x53, // Keypad decimal
+            0x43 => 0x37, // Keypad *
+            0x45 => 0x4E, // Keypad +
+            0x47 => 0x45, // Keypad clear / Num Lock
+            0x4B => Extended(0x35), // Keypad /
+            0x4C => Extended(0x1C), // Keypad enter
+            0x4E => 0x4A, // Keypad -
+            0x52 => 0x52, // Keypad 0
+            0x53 => 0x4F, // Keypad 1
+            0x54 => 0x50, // Keypad 2
+            0x55 => 0x51, // Keypad 3
+            0x56 => 0x4B, // Keypad 4
+            0x57 => 0x4C, // Keypad 5
+            0x58 => 0x4D, // Keypad 6
+            0x59 => 0x47, // Keypad 7
+            0x5B => 0x48, // Keypad 8
+            0x5C => 0x49, // Keypad 9
+            0x60 => 0x3F, // F5
+            0x61 => 0x40, // F6
+            0x62 => 0x41, // F7
+            0x63 => 0x3D, // F3
+            0x64 => 0x42, // F8
+            0x65 => 0x43, // F9
+            0x67 => 0x57, // F11
+            0x69 => Extended(0x37), // F13 / Print Screen on PC keyboards
+            0x6B => 0x46, // F14 / Scroll Lock
+            0x6D => 0x44, // F10
+            0x6F => 0x58, // F12
+            0x71 => 0x45, // F15 / Pause-Break best-effort in scancode dev mode
+            0x72 => Extended(0x52), // Help / Insert
+            0x73 => Extended(0x47), // Home
+            0x74 => Extended(0x49), // Page Up
+            0x75 => Extended(0x53), // Forward Delete
+            0x76 => 0x3E, // F4
+            0x77 => Extended(0x4F), // End
+            0x78 => 0x3C, // F2
+            0x79 => Extended(0x51), // Page Down
+            0x7A => 0x3B, // F1
+            0x7B => Extended(0x4B), // Left
+            0x7C => Extended(0x4D), // Right
+            0x7D => Extended(0x50), // Down
+            0x7E => Extended(0x48), // Up
             _ => null
         };
 
-    private static bool IsExtendedKey(ushort originalMacKeyCode, ushort scanCode) =>
-        originalMacKeyCode is 0x3D or 0x3E or 0x73 or 0x74 or 0x75 or 0x77 or 0x79 or 0x7B or 0x7C or 0x7D or 0x7E
-        || scanCode is 0x47 or 0x49 or 0x4B or 0x4D or 0x4F or 0x50 or 0x51 or 0x53;
+    private static ushort Extended(ushort scanCode) => (ushort)(ExtendedScanCodePrefix | scanCode);
+    private static ushort BaseScanCode(ushort scanCode) => (ushort)(scanCode & 0x00FF);
+    private static bool IsExtendedScanCode(ushort scanCode) => (scanCode & ExtendedScanCodePrefix) == ExtendedScanCodePrefix;
 
     private void Send(INPUT input)
     {
@@ -256,6 +297,7 @@ public sealed class InputInjector
     private const ushort MacRightOption = 0x3D;
     private const ushort WindowsLeftControl = 0x1D;
     private const ushort WindowsLeftAlt = 0x38;
+    private const ushort ExtendedScanCodePrefix = 0xE000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct INPUT

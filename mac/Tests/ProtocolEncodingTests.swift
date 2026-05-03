@@ -272,10 +272,10 @@ enum ProtocolEncodingTests {
         }
 
         r.run("hidKeyMapRoundTripCommonKeys") {
-            // Spot-check coverage: A, Z, 1, 0, F1, Space, Enter, Esc, LCtrl, LShift, LAlt, LCmd
+            // Spot-check coverage: A, Z, 1, 0, F1, PrintScreen/F13, Insert, Space, Enter, Esc, modifiers.
             let pairs: [(UInt16, UInt16)] = [
                 (0x00, 0x04), (0x06, 0x1D), (0x12, 0x1E), (0x1D, 0x27),
-                (0x7A, 0x3A), (0x31, 0x2C), (0x24, 0x28), (0x35, 0x29),
+                (0x7A, 0x3A), (0x69, 0x46), (0x72, 0x49), (0x31, 0x2C), (0x24, 0x28), (0x35, 0x29),
                 (0x3B, 0xE0), (0x38, 0xE1), (0x3A, 0xE2), (0x37, 0xE3),
             ]
             for (kvk, hid) in pairs {
@@ -295,6 +295,15 @@ enum ProtocolEncodingTests {
             let recovered = HidKeyMap.modifiers(fromCGEventFlags: raw)
             // The mapping intentionally folds L/R into Left-only on the way back.
             try expectEqual(recovered, mods)
+        }
+
+        r.run("windowsScanCodeToMacVirtualKeyCoversSpecialKeys") {
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0x3B), 0x7A) // F1
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0x58), 0x6F) // F12
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0xE037), 0x69) // Print Screen / F13
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0xE052), 0x72) // Insert / Help
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0xE048), 0x7E) // Up
+            try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0x37), 0x43) // Keypad *
         }
 
         r.run("layoutEngineFindsContainingScreen") {

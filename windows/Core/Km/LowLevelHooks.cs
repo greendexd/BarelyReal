@@ -140,7 +140,7 @@ public sealed class LowLevelHooks : IDisposable
 
             if (isDown || isUp)
             {
-                var keyCode = (ushort)Math.Min(hook.scanCode, ushort.MaxValue);
+                var keyCode = EncodeKeyboardScanCodeForWire(hook.scanCode, hook.flags);
                 var payload = KmPayload.EncodeKey(new KmPayload.Key(keyCode, hook.flags));
                 Emit(new KmFrame(NextSeq(), NowUs(), isDown ? KmType.KeyDown : KmType.KeyUp, payload));
             }
@@ -222,6 +222,14 @@ public sealed class LowLevelHooks : IDisposable
 
     private static int HighWordSigned(uint value) => unchecked((short)((value >> 16) & 0xFFFF));
 
+    public static ushort EncodeKeyboardScanCodeForWire(uint scanCode, uint flags)
+    {
+        var normalized = (ushort)Math.Min(scanCode, 0xFF);
+        return (flags & LLKHF_EXTENDED) != 0
+            ? (ushort)(ExtendedScanCodePrefix | normalized)
+            : normalized;
+    }
+
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     private const int WH_MOUSE_LL = 14;
@@ -231,6 +239,8 @@ public sealed class LowLevelHooks : IDisposable
     private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_SYSKEYUP = 0x0105;
+    private const uint LLKHF_EXTENDED = 0x01;
+    private const ushort ExtendedScanCodePrefix = 0xE000;
     private const int WM_MOUSEMOVE = 0x0200;
     private const int WM_LBUTTONDOWN = 0x0201;
     private const int WM_LBUTTONUP = 0x0202;

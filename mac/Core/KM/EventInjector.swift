@@ -124,7 +124,7 @@ public final class EventInjector {
     }
 
     private func remapKeyCode(_ keyCode: CGKeyCode) -> CGKeyCode {
-        let keyCode = assumeWindowsScanCodes ? Self.windowsScanCodeToMacVirtualKey(keyCode) ?? keyCode : keyCode
+        let keyCode = assumeWindowsScanCodes ? Self.macVirtualKeyForWindowsScanCode(UInt16(keyCode)) ?? keyCode : keyCode
 
         guard modifierRemap.cmdToCtrl else { return keyCode }
 
@@ -137,7 +137,7 @@ public final class EventInjector {
         }
     }
 
-    private static func windowsScanCodeToMacVirtualKey(_ scanCode: CGKeyCode) -> CGKeyCode? {
+    public static func macVirtualKeyForWindowsScanCode(_ scanCode: UInt16) -> CGKeyCode? {
         switch scanCode {
         case 0x01: return 0x35 // Escape
         case 0x02: return 0x12 // 1
@@ -193,13 +193,54 @@ public final class EventInjector {
         case 0x34: return 0x2F // .
         case 0x35: return 0x2C // /
         case 0x36: return 0x3C // Right Shift
+        case 0x37: return 0x43 // Keypad *
         case 0x38: return 0x3A // Alt/Option
         case 0x39: return 0x31 // Space
         case 0x3A: return 0x39 // Caps Lock
-        case 0x48: return 0x7E // Up
-        case 0x4B: return 0x7B // Left
-        case 0x4D: return 0x7C // Right
-        case 0x50: return 0x7D // Down
+        case 0x3B: return 0x7A // F1
+        case 0x3C: return 0x78 // F2
+        case 0x3D: return 0x63 // F3
+        case 0x3E: return 0x76 // F4
+        case 0x3F: return 0x60 // F5
+        case 0x40: return 0x61 // F6
+        case 0x41: return 0x62 // F7
+        case 0x42: return 0x64 // F8
+        case 0x43: return 0x65 // F9
+        case 0x44: return 0x6D // F10
+        case 0x45: return 0x47 // Num Lock / Keypad Clear
+        case 0x46: return 0x6B // Scroll Lock / F14
+        case 0x47: return 0x59 // Keypad 7
+        case 0x48: return 0x5B // Keypad 8
+        case 0x49: return 0x5C // Keypad 9
+        case 0x4A: return 0x4E // Keypad -
+        case 0x4B: return 0x56 // Keypad 4
+        case 0x4C: return 0x57 // Keypad 5
+        case 0x4D: return 0x58 // Keypad 6
+        case 0x4E: return 0x45 // Keypad +
+        case 0x4F: return 0x53 // Keypad 1
+        case 0x50: return 0x54 // Keypad 2
+        case 0x51: return 0x55 // Keypad 3
+        case 0x52: return 0x52 // Keypad 0
+        case 0x53: return 0x41 // Keypad decimal
+        case 0x57: return 0x67 // F11
+        case 0x58: return 0x6F // F12
+        case 0xE01C: return 0x4C // Keypad Enter
+        case 0xE01D: return rightControlKey
+        case 0xE035: return 0x4B // Keypad /
+        case 0xE037: return 0x69 // Print Screen / F13
+        case 0xE038: return 0x3D // Right Alt / Option
+        case 0xE047: return 0x73 // Home
+        case 0xE048: return 0x7E // Up
+        case 0xE049: return 0x74 // Page Up
+        case 0xE04B: return 0x7B // Left
+        case 0xE04D: return 0x7C // Right
+        case 0xE04F: return 0x77 // End
+        case 0xE050: return 0x7D // Down
+        case 0xE051: return 0x79 // Page Down
+        case 0xE052: return 0x72 // Insert / Help
+        case 0xE053: return 0x75 // Forward Delete
+        case 0xE05B: return leftCommandKey
+        case 0xE05C: return rightCommandKey
         default: return nil
         }
     }
