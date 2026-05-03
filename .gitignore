@@ -1,0 +1,45 @@
+# macOS / editor noise
+.DS_Store
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Logs and local runtime output
+*.log
+logs/
+
+# Archives and generated packages
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+*.dmg
+*.pkg
+
+# SwiftPM / Xcode
+mac/.build/
+mac/.swiftpm/
+mac/DerivedData/
+mac/dist/
+*.xcodeproj/
+Package.resolved
+
+# .NET / Visual Studio
+windows/**/bin/
+windows/**/obj/
+windows/.vs/
+*.user
+*.suo
+TestResults/
+
+# Local app state / secrets
+*.key
+*.p12
+*.mobileprovision
+*.cer
+*.pem
+*.sqlite
+*.sqlite3
+clipboard.db
