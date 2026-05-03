@@ -29,10 +29,22 @@ Verify:
 powershell -ExecutionPolicy Bypass -File windows\scripts\verify.ps1
 ```
 
+Allow inbound dev ports once from Administrator PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\scripts\allow-firewall.ps1
+```
+
 Run the Windows app:
 
 ```powershell
 dotnet run --project windows\App\BarelyReal.App.csproj
+```
+
+If the app starts but the mouse does not move:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\scripts\diagnose-runtime.ps1
 ```
 
 ## First Time on Mac

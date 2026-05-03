@@ -17,6 +17,18 @@ The script runs:
 
 Logs are written to `windows/artifacts/verify-windows.log`.
 
+If the app starts but the Mac mouse does not move Windows, allow inbound dev ports once from Administrator PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\scripts\allow-firewall.ps1
+```
+
+Then run runtime diagnostics:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\scripts\diagnose-runtime.ps1
+```
+
 Manual KM smoke after the build is green:
 
 ```powershell
