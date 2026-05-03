@@ -138,8 +138,7 @@ private final class RemoteInputGuard {
     }
 
     func maintainPin() {
-        guard isActive, let pinnedPoint else { return }
-        CGWarpMouseCursorPosition(pinnedPoint)
+        guard isActive else { return }
         if !cursorHidden, CGDisplayHideCursor(CGMainDisplayID()) == .success {
             cursorHidden = true
         }

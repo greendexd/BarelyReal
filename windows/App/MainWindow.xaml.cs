@@ -449,8 +449,11 @@ public partial class MainWindow : Window
             (0, local.MaxY - remote.MinY, Math.Abs(local.MaxY - remote.MinY)),
         };
         var best = candidates.OrderBy(candidate => candidate.Distance).First();
+        if (best.Distance > LayoutSnapThreshold) return layout;
         return layout.Translated(RemotePeerId, best.Dx, best.Dy);
     }
+
+    private const int LayoutSnapThreshold = 96;
 
     // MARK: - Status
 

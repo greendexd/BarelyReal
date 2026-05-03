@@ -118,6 +118,12 @@ public sealed class LowLevelHooks : IDisposable
         if (nCode >= 0)
         {
             var hook = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+            if (SuppressLocalEvents && IsInjectedMouse(hook))
+            {
+                _lastMousePoint = hook.pt;
+                return new IntPtr(1);
+            }
+
             var frame = MouseFrame((int)wParam, hook);
             if (frame is not null)
                 Emit(frame);
@@ -134,6 +140,9 @@ public sealed class LowLevelHooks : IDisposable
         if (nCode >= 0)
         {
             var hook = Marshal.PtrToStructure<KBDLLHOOKSTRUCT>(lParam);
+            if (SuppressLocalEvents && IsInjectedKeyboard(hook))
+                return new IntPtr(1);
+
             var message = (int)wParam;
             var isDown = message is WM_KEYDOWN or WM_SYSKEYDOWN;
             var isUp = message is WM_KEYUP or WM_SYSKEYUP;
@@ -222,6 +231,9 @@ public sealed class LowLevelHooks : IDisposable
 
     private static int HighWordSigned(uint value) => unchecked((short)((value >> 16) & 0xFFFF));
 
+    private static bool IsInjectedMouse(MSLLHOOKSTRUCT hook) => (hook.flags & LLMHF_INJECTED) != 0;
+    private static bool IsInjectedKeyboard(KBDLLHOOKSTRUCT hook) => (hook.flags & LLKHF_INJECTED) != 0;
+
     public static ushort EncodeKeyboardScanCodeForWire(uint scanCode, uint flags)
     {
         var normalized = (ushort)Math.Min(scanCode, 0xFF);
@@ -239,7 +251,9 @@ public sealed class LowLevelHooks : IDisposable
     private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_SYSKEYUP = 0x0105;
+    private const uint LLMHF_INJECTED = 0x01;
     private const uint LLKHF_EXTENDED = 0x01;
+    private const uint LLKHF_INJECTED = 0x10;
     private const ushort ExtendedScanCodePrefix = 0xE000;
     private const int WM_MOUSEMOVE = 0x0200;
     private const int WM_LBUTTONDOWN = 0x0201;

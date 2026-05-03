@@ -370,6 +370,7 @@ final class BarelyRealStore: ObservableObject {
             (0, local.maxY - remote.minY, abs(local.maxY - remote.minY)),
         ]
         guard let best = candidates.min(by: { $0.distance < $1.distance }) else { return layout }
+        guard best.distance <= Self.layoutSnapThreshold else { return layout }
         return layout.translated(peerId: remotePeerId, dx: best.dx, dy: best.dy)
     }
 
@@ -455,6 +456,8 @@ final class BarelyRealStore: ObservableObject {
         formatter.dateFormat = "HH:mm:ss"
         return formatter
     }()
+
+    private static let layoutSnapThreshold = 96
 }
 
 struct ConnectionSettings {
