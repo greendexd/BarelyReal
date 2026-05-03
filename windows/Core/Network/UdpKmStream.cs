@@ -9,6 +9,7 @@ namespace BarelyReal.Core.Network;
 public sealed class UdpKmStream : IDisposable
 {
     public event Action<KmFrame>? OnFrame;
+    public event Action<string>? LogLine;
 
     private UdpClient? _client;
     private CancellationTokenSource? _cts;
@@ -51,12 +52,15 @@ public sealed class UdpKmStream : IDisposable
             while (!token.IsCancellationRequested)
             {
                 var result = await client.ReceiveAsync(token).ConfigureAwait(false);
+                LogLine?.Invoke(
+                    $"UDP frame received raw bytes len={result.Buffer.Length} from={result.RemoteEndPoint} hex={PreviewHex(result.Buffer)}");
                 try
                 {
                     OnFrame?.Invoke(KmFrameCodec.Decode(result.Buffer));
                 }
-                catch (BrpCodecException)
+                catch (BrpCodecException ex)
                 {
+                    LogLine?.Invoke($"UDP frame decode failed: {ex.Error}");
                     // Malformed UDP datagrams are dropped. Control channel owns reconnect policy.
                 }
             }
@@ -69,5 +73,13 @@ public sealed class UdpKmStream : IDisposable
         {
             // Expected during Close().
         }
+    }
+
+    private static string PreviewHex(byte[] bytes)
+    {
+        const int maxPreviewBytes = 64;
+        var previewLength = Math.Min(bytes.Length, maxPreviewBytes);
+        var hex = Convert.ToHexString(bytes.AsSpan(0, previewLength));
+        return bytes.Length > maxPreviewBytes ? $"{hex}..." : hex;
     }
 }

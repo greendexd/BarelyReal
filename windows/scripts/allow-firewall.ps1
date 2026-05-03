@@ -2,7 +2,7 @@ param(
     [int]$KmPort = 24801,
     [int]$ClipboardPort = 24802,
     [ValidateSet("Private", "Domain", "Public", "Any")]
-    [string]$Profile = "Private"
+    [string]$Profile = "Any"
 )
 
 $ErrorActionPreference = "Stop"

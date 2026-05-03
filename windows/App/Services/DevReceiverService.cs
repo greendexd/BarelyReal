@@ -48,8 +48,9 @@ internal sealed class DevReceiverService : IDisposable
             FramesReceived = 0;
             ClipboardEvents = 0;
             _cts = new CancellationTokenSource();
-            _injector = new InputInjector();
+            _injector = new InputInjector { Log = Log };
             _stream = new UdpKmStream();
+            _stream.LogLine += Log;
             _stream.OnFrame += HandleFrame;
 
             try

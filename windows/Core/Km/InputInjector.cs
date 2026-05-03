@@ -15,6 +15,7 @@ public sealed class InputInjector
 
     public ModifierRemap Remap { get; } = new();
     public bool AssumeMacVirtualKeyCodes { get; set; } = true;
+    public Action<string>? Log { get; set; }
 
     public void Inject(KmFrame frame)
     {
@@ -27,7 +28,10 @@ public sealed class InputInjector
 
             case KmType.MouseMoveAbs:
                 var abs = KmPayload.DecodeMouseMove(frame.Payload);
-                _ = SetCursorPos(abs.X, abs.Y);
+                if (!SetCursorPos(abs.X, abs.Y))
+                {
+                    Log?.Invoke($"SetCursorPos failed x={abs.X} y={abs.Y} error={Marshal.GetLastWin32Error()}");
+                }
                 break;
 
             case KmType.MouseButton:
@@ -222,10 +226,14 @@ public sealed class InputInjector
         originalMacKeyCode is 0x3D or 0x3E or 0x73 or 0x74 or 0x75 or 0x77 or 0x79 or 0x7B or 0x7C or 0x7D or 0x7E
         || scanCode is 0x47 or 0x49 or 0x4B or 0x4D or 0x4F or 0x50 or 0x51 or 0x53;
 
-    private static void Send(INPUT input)
+    private void Send(INPUT input)
     {
         var inputs = new[] { input };
-        _ = SendInput(1, inputs, Marshal.SizeOf<INPUT>());
+        var sent = SendInput(1, inputs, Marshal.SizeOf<INPUT>());
+        if (sent != 1)
+        {
+            Log?.Invoke($"SendInput failed type={input.type} sent={sent} error={Marshal.GetLastWin32Error()}");
+        }
     }
 
     private const uint INPUT_MOUSE = 0;

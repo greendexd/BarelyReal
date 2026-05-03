@@ -19,6 +19,12 @@ Get-NetIPAddress -AddressFamily IPv4 |
     Format-Table InterfaceAlias, IPAddress, PrefixLength -AutoSize
 
 Write-Host ""
+Write-Host "Network profiles:" -ForegroundColor Cyan
+Get-NetConnectionProfile |
+    Sort-Object InterfaceAlias |
+    Format-Table InterfaceAlias, Name, NetworkCategory, IPv4Connectivity -AutoSize
+
+Write-Host ""
 Write-Host "BarelyReal processes:" -ForegroundColor Cyan
 Get-Process |
     Where-Object { $_.ProcessName -like "BarelyReal*" } |
@@ -26,13 +32,13 @@ Get-Process |
     Format-Table -AutoSize
 
 Write-Host ""
-Write-Host "Listening UDP $KmPort:" -ForegroundColor Cyan
+Write-Host "Listening UDP ${KmPort}:" -ForegroundColor Cyan
 Get-NetUDPEndpoint -LocalPort $KmPort -ErrorAction SilentlyContinue |
     Select-Object LocalAddress, LocalPort, OwningProcess |
     Format-Table -AutoSize
 
 Write-Host ""
-Write-Host "Listening TCP $ClipboardPort:" -ForegroundColor Cyan
+Write-Host "Listening TCP ${ClipboardPort}:" -ForegroundColor Cyan
 Get-NetTCPConnection -LocalPort $ClipboardPort -State Listen -ErrorAction SilentlyContinue |
     Select-Object LocalAddress, LocalPort, State, OwningProcess |
     Format-Table -AutoSize
