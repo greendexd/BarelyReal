@@ -453,7 +453,7 @@ public partial class MainWindow : Window
         return layout.Translated(RemotePeerId, best.Dx, best.Dy);
     }
 
-    private const int LayoutSnapThreshold = 96;
+    private const int LayoutSnapThreshold = 32;
 
     // MARK: - Status
 

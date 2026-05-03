@@ -457,7 +457,7 @@ final class BarelyRealStore: ObservableObject {
         return formatter
     }()
 
-    private static let layoutSnapThreshold = 96
+    private static let layoutSnapThreshold = 32
 }
 
 struct ConnectionSettings {

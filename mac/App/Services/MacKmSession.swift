@@ -123,7 +123,7 @@ enum KmSessionError: Error, CustomStringConvertible {
 
 private final class RemoteInputGuard {
     private var isActive = false
-    private var cursorHidden = false
+    private var hiddenDisplays: [CGDirectDisplayID] = []
     private var pinnedPoint: CGPoint?
 
     func start(pinnedAt point: CGPoint) {
@@ -131,31 +131,46 @@ private final class RemoteInputGuard {
         pinnedPoint = point
         CGWarpMouseCursorPosition(point)
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-        if CGDisplayHideCursor(CGMainDisplayID()) == .success {
-            cursorHidden = true
-        }
+        hideCursorOnActiveDisplays()
         isActive = true
     }
 
     func maintainPin() {
         guard isActive else { return }
-        if !cursorHidden, CGDisplayHideCursor(CGMainDisplayID()) == .success {
-            cursorHidden = true
+        if hiddenDisplays.isEmpty {
+            hideCursorOnActiveDisplays()
         }
     }
 
     func stop() {
         guard isActive else { return }
-        if cursorHidden {
-            _ = CGDisplayShowCursor(CGMainDisplayID())
-            cursorHidden = false
+        for display in hiddenDisplays {
+            _ = CGDisplayShowCursor(display)
         }
+        hiddenDisplays.removeAll()
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         pinnedPoint = nil
         isActive = false
     }
 
     deinit { stop() }
+
+    private func hideCursorOnActiveDisplays() {
+        for display in Self.activeDisplays() where !hiddenDisplays.contains(display) {
+            if CGDisplayHideCursor(display) == .success {
+                hiddenDisplays.append(display)
+            }
+        }
+    }
+
+    private static func activeDisplays() -> [CGDirectDisplayID] {
+        var count: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &count)
+        guard count > 0 else { return [CGMainDisplayID()] }
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        CGGetActiveDisplayList(count, &displays, &count)
+        return Array(displays.prefix(Int(count)))
+    }
 }
 
 private final class EdgeBridge {
@@ -253,11 +268,7 @@ private final class EdgeBridge {
               target.peerId == remotePeerId
         else { return nil }
 
-        let clamped = CGPoint(
-            x: min(max(projected.x, CGFloat(target.x)), CGFloat(target.maxX - 1)),
-            y: min(max(projected.y, CGFloat(target.y)), CGFloat(target.maxY - 1))
-        )
-        return enterRemote(virtualPoint: clamped, reference: frame)
+        return enterRemote(virtualPoint: entryPoint(projected: projected, target: target, move: move), reference: frame)
     }
 
     private func enterRemote(virtualPoint: CGPoint, reference frame: KmFrame) -> KmFrame? {
@@ -332,4 +343,23 @@ private final class EdgeBridge {
     private static func currentCursorLocation() -> CGPoint {
         CGEvent(source: nil)?.location ?? .zero
     }
+
+    private func entryPoint(projected: CGPoint, target: ScreenRect, move: KmPayload.MouseMove) -> CGPoint {
+        var x = min(max(projected.x, CGFloat(target.x)), CGFloat(target.maxX - 1))
+        var y = min(max(projected.y, CGFloat(target.y)), CGFloat(target.maxY - 1))
+        let inset = CGFloat(Self.edgeEntryInset)
+
+        if abs(move.x) >= abs(move.y), move.x != 0 {
+            x = move.x > 0 ? CGFloat(target.x) + inset : CGFloat(target.maxX - 1) - inset
+        } else if move.y != 0 {
+            y = move.y > 0 ? CGFloat(target.y) + inset : CGFloat(target.maxY - 1) - inset
+        }
+
+        return CGPoint(
+            x: min(max(x, CGFloat(target.x)), CGFloat(target.maxX - 1)),
+            y: min(max(y, CGFloat(target.y)), CGFloat(target.maxY - 1))
+        )
+    }
+
+    private static let edgeEntryInset = 24
 }

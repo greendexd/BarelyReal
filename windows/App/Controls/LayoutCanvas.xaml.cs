@@ -47,7 +47,7 @@ public partial class LayoutCanvas : UserControl
 
         DrawGrid(canvasW, canvasH);
 
-        var bounds = PaddedBounds(_layout.Bounds());
+        var bounds = EditorBounds();
         _scale = Math.Min((canvasW - 44) / Math.Max(bounds.Width, 1), (canvasH - 44) / Math.Max(bounds.Height, 1));
 
         foreach (var screen in _layout.ScreensFor(_localPeerId))
@@ -154,12 +154,22 @@ public partial class LayoutCanvas : UserControl
         Render();
     }
 
-    private static ScreenRectBounds PaddedBounds(ScreenRectBounds? bounds)
+    private ScreenRectBounds EditorBounds()
     {
-        bounds ??= new ScreenRectBounds(0, 0, 1440, 900);
-        var padX = Math.Max(bounds.Width / 8, 240);
-        var padY = Math.Max(bounds.Height / 8, 160);
-        return new ScreenRectBounds(bounds.MinX - padX, bounds.MinY - padY, bounds.MaxX + padX, bounds.MaxY + padY);
+        var local = new BarelyReal.Core.Layout.Layout(_layout.ScreensFor(_localPeerId)).Bounds()
+            ?? new ScreenRectBounds(0, 0, 1440, 900);
+        var remote = new BarelyReal.Core.Layout.Layout(_layout.ScreensFor(_remotePeerId)).Bounds();
+
+        var remoteWidth = Math.Max(remote?.Width ?? 1440, 640);
+        var remoteHeight = Math.Max(remote?.Height ?? 900, 480);
+        var padX = Math.Max(Math.Max(local.Width, remoteWidth) / 3, 280);
+        var padY = Math.Max(Math.Max(local.Height, remoteHeight) / 3, 220);
+
+        return new ScreenRectBounds(
+            local.MinX - remoteWidth - padX,
+            local.MinY - remoteHeight - padY,
+            local.MaxX + remoteWidth + padX,
+            local.MaxY + remoteHeight + padY);
     }
 
     private void DrawGrid(double canvasW, double canvasH)

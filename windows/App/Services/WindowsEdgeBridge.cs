@@ -23,6 +23,7 @@ internal sealed class WindowsEdgeBridge
     private bool _isRemoteActive;
     private POINT? _remoteVirtualPoint;
     private POINT? _pinnedPoint;
+    private readonly RemoteInputGuard _guard = new();
 
     public WindowsEdgeBridge(
         string localPeerId,
@@ -106,9 +107,7 @@ internal sealed class WindowsEdgeBridge
         var target = layout.Screen(projected.X, projected.Y);
         if (currentScreen?.PeerId != _localPeerId || target?.PeerId != _remotePeerId) return null;
 
-        projected.X = Math.Clamp(projected.X, target.X, target.MaxX - 1);
-        projected.Y = Math.Clamp(projected.Y, target.Y, target.MaxY - 1);
-        return EnterRemote(projected, frame);
+        return EnterRemote(EntryPoint(projected, target, move.Value), frame);
     }
 
     private KmFrame? EnterRemote(POINT virtualPoint, KmFrame reference)
@@ -122,6 +121,7 @@ internal sealed class WindowsEdgeBridge
         if (GetCursorPos(out var cursor))
         {
             _pinnedPoint = cursor;
+            _guard.Start();
             _ = SetCursorPos(cursor.X, cursor.Y);
         }
 
@@ -160,6 +160,7 @@ internal sealed class WindowsEdgeBridge
     {
         if (!_isRemoteActive) return;
         _isRemoteActive = false;
+        _guard.Stop();
         if (_pinnedPoint is { } point)
             _ = SetCursorPos(point.X, point.Y);
         _remoteVirtualPoint = null;
@@ -169,6 +170,7 @@ internal sealed class WindowsEdgeBridge
 
     private void MaintainPin()
     {
+        _guard.MaintainHidden();
         if (_pinnedPoint is { } pin)
             _ = SetCursorPos(pin.X, pin.Y);
     }
@@ -193,9 +195,75 @@ internal sealed class WindowsEdgeBridge
         catch { return null; }
     }
 
+    private static POINT EntryPoint(POINT projected, ScreenRect target, KmPayload.MouseMove move)
+    {
+        var point = new POINT
+        {
+            X = Math.Clamp(projected.X, target.X, target.MaxX - 1),
+            Y = Math.Clamp(projected.Y, target.Y, target.MaxY - 1)
+        };
+
+        if (Math.Abs(move.X) >= Math.Abs(move.Y) && move.X != 0)
+            point.X = move.X > 0 ? target.X + EdgeEntryInset : target.MaxX - 1 - EdgeEntryInset;
+        else if (move.Y != 0)
+            point.Y = move.Y > 0 ? target.Y + EdgeEntryInset : target.MaxY - 1 - EdgeEntryInset;
+
+        point.X = Math.Clamp(point.X, target.X, target.MaxX - 1);
+        point.Y = Math.Clamp(point.Y, target.Y, target.MaxY - 1);
+        return point;
+    }
+
+    private sealed class RemoteInputGuard
+    {
+        private bool _active;
+        private int _hideCalls;
+
+        public void Start()
+        {
+            if (_active) return;
+            _hideCalls = HideCursor();
+            _active = true;
+        }
+
+        public void MaintainHidden()
+        {
+            // Deliberately no-op: repeatedly calling ShowCursor(false) would drive
+            // Windows' display counter far negative and make restoration unreliable.
+        }
+
+        public void Stop()
+        {
+            if (!_active) return;
+            ShowCursorUntilVisible(_hideCalls);
+            _hideCalls = 0;
+            _active = false;
+        }
+
+        private static int HideCursor()
+        {
+            var calls = 0;
+            for (var i = 0; i < 8; i++)
+            {
+                calls++;
+                if (ShowCursor(false) < 0)
+                    break;
+            }
+            return calls;
+        }
+
+        private static void ShowCursorUntilVisible(int hideCalls)
+        {
+            for (var i = 0; i < hideCalls; i++)
+                _ = ShowCursor(true);
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
 
     [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int X, int Y);
+    [DllImport("user32.dll")] private static extern int ShowCursor(bool bShow);
+
+    private const int EdgeEntryInset = 24;
 }

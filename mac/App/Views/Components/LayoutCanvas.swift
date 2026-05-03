@@ -13,12 +13,10 @@ struct LayoutCanvas: View {
 
     private var localScreens: [ScreenRect] { layout.screens(peerId: localPeerId) }
     private var remoteScreens: [ScreenRect] { layout.screens(peerId: remotePeerId) }
-    private var allBounds: ScreenRectBounds? { layout.bounds() }
-
     var body: some View {
         GeometryReader { geo in
             let canvas = CGSize(width: geo.size.width, height: 260)
-            let bounds = paddedBounds(allBounds)
+            let bounds = editorBounds()
             let scale = min(
                 (canvas.width - 44) / CGFloat(max(bounds.width, 1)),
                 (canvas.height - 44) / CGFloat(max(bounds.height, 1))
@@ -61,6 +59,7 @@ struct LayoutCanvas: View {
                 }
             }
             .gesture(remoteDrag(scale: scale))
+            .clipped()
         }
         .frame(height: 260)
     }
@@ -80,11 +79,22 @@ struct LayoutCanvas: View {
             }
     }
 
-    private func paddedBounds(_ bounds: ScreenRectBounds?) -> ScreenRectBounds {
-        let bounds = bounds ?? ScreenRectBounds(minX: 0, minY: 0, maxX: 1440, maxY: 900)
-        let padX = max(bounds.width / 8, 240)
-        let padY = max(bounds.height / 8, 160)
-        return ScreenRectBounds(minX: bounds.minX - padX, minY: bounds.minY - padY, maxX: bounds.maxX + padX, maxY: bounds.maxY + padY)
+    private func editorBounds() -> ScreenRectBounds {
+        let fallback = ScreenRectBounds(minX: 0, minY: 0, maxX: 1440, maxY: 900)
+        let local = BarelyRealCore.Layout(screens: localScreens).bounds() ?? fallback
+        let remote = BarelyRealCore.Layout(screens: remoteScreens).bounds()
+
+        let remoteWidth = max(remote?.width ?? 1440, 640)
+        let remoteHeight = max(remote?.height ?? 900, 480)
+        let padX = max(max(local.width, remoteWidth) / 3, 280)
+        let padY = max(max(local.height, remoteHeight) / 3, 220)
+
+        return ScreenRectBounds(
+            minX: local.minX - remoteWidth - padX,
+            minY: local.minY - remoteHeight - padY,
+            maxX: local.maxX + remoteWidth + padX,
+            maxY: local.maxY + remoteHeight + padY
+        )
     }
 
     private func position(for screen: ScreenRect, in canvas: CGSize, bounds: ScreenRectBounds, scale: CGFloat) -> CGPoint {
