@@ -68,6 +68,71 @@ public sealed class Layout
             ? screen with { X = screen.X + dx, Y = screen.Y + dy }
             : screen));
     }
+
+    public Layout StickySnapped(string movingPeerId, string anchorPeerId)
+    {
+        var moving = Bounds(movingPeerId);
+        if (moving is null) return this;
+        var anchors = ScreensFor(anchorPeerId);
+        if (anchors.Count == 0) return this;
+
+        SnapCandidate? best = null;
+        foreach (var anchorScreen in anchors)
+        {
+            var anchor = ScreenRectBounds.From(anchorScreen);
+            foreach (var candidate in SnapCandidate.Candidates(moving, anchor))
+            {
+                if (best is null || candidate.Score < best.Score)
+                    best = candidate;
+            }
+        }
+
+        return best is null ? this : Translated(movingPeerId, best.Dx, best.Dy);
+    }
+}
+
+internal sealed record SnapCandidate(int Dx, int Dy, int Score)
+{
+    public static IEnumerable<SnapCandidate> Candidates(ScreenRectBounds moving, ScreenRectBounds anchor)
+    {
+        yield return Candidate(
+            moving,
+            anchor.MinX - moving.Width,
+            AlignedStart(moving.MinY, moving.MaxY, anchor.MinY, anchor.MaxY, moving.Height));
+        yield return Candidate(
+            moving,
+            anchor.MaxX,
+            AlignedStart(moving.MinY, moving.MaxY, anchor.MinY, anchor.MaxY, moving.Height));
+        yield return Candidate(
+            moving,
+            AlignedStart(moving.MinX, moving.MaxX, anchor.MinX, anchor.MaxX, moving.Width),
+            anchor.MinY - moving.Height);
+        yield return Candidate(
+            moving,
+            AlignedStart(moving.MinX, moving.MaxX, anchor.MinX, anchor.MaxX, moving.Width),
+            anchor.MaxY);
+    }
+
+    private static SnapCandidate Candidate(ScreenRectBounds moving, int x, int y)
+    {
+        var dx = x - moving.MinX;
+        var dy = y - moving.MinY;
+        return new SnapCandidate(dx, dy, Math.Abs(dx) + Math.Abs(dy));
+    }
+
+    private static int AlignedStart(int movingStart, int movingEnd, int anchorStart, int anchorEnd, int length)
+    {
+        const int cornerSnap = 96;
+        if (Math.Abs(movingStart - anchorStart) <= cornerSnap)
+            return anchorStart;
+        if (Math.Abs(movingEnd - anchorEnd) <= cornerSnap)
+            return anchorEnd - length;
+        if (movingEnd <= anchorStart)
+            return anchorStart;
+        if (movingStart >= anchorEnd)
+            return anchorEnd - length;
+        return movingStart;
+    }
 }
 
 public sealed class LayoutEngine

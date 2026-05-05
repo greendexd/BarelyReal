@@ -21,7 +21,12 @@ struct LayoutCanvas: View {
                 (canvas.width - 44) / CGFloat(max(bounds.width, 1)),
                 (canvas.height - 44) / CGFloat(max(bounds.height, 1))
             )
-            let dragVirtual = CGSize(width: dragPixels.width / max(scale, 0.001), height: dragPixels.height / max(scale, 0.001))
+            let dragDx = Int((dragPixels.width / max(scale, 0.001)).rounded())
+            let dragDy = Int((dragPixels.height / max(scale, 0.001)).rounded())
+            let previewLayout = layout
+                .translated(peerId: remotePeerId, dx: dragDx, dy: dragDy)
+                .stickySnapped(peerId: remotePeerId, toPeerId: localPeerId)
+            let previewRemoteScreens = remoteScreens.isEmpty ? [] : previewLayout.screens(peerId: remotePeerId)
 
             ZStack(alignment: .topLeading) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -39,18 +44,10 @@ struct LayoutCanvas: View {
                         .position(position(for: screen, in: canvas, bounds: bounds, scale: scale))
                 }
 
-                ForEach(remoteScreens, id: \.screenId) { screen in
-                    let moved = ScreenRect(
-                        peerId: screen.peerId,
-                        screenId: screen.screenId,
-                        x: screen.x + Int(dragVirtual.width.rounded()),
-                        y: screen.y + Int(dragVirtual.height.rounded()),
-                        width: screen.width,
-                        height: screen.height
-                    )
-                    screenChip(moved, title: screenTitle(screen, fallback: "Windows"), accent: remoteIsStale ? .orange : .blue, glyph: "pc")
+                ForEach(previewRemoteScreens, id: \.screenId) { screen in
+                    screenChip(screen, title: screenTitle(screen, fallback: "Windows"), accent: remoteIsStale ? .orange : .blue, glyph: "pc")
                         .frame(width: CGFloat(screen.width) * scale, height: CGFloat(screen.height) * scale)
-                        .position(position(for: moved, in: canvas, bounds: bounds, scale: scale))
+                        .position(position(for: screen, in: canvas, bounds: bounds, scale: scale))
                 }
 
                 if remoteScreens.isEmpty {

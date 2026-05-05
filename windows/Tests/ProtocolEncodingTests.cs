@@ -449,6 +449,30 @@ internal static class ProtocolEncodingTests
             Expect.Equal(moved.Bounds("windows"), new ScreenRectBounds(0, 0, 4480, 1440));
         });
 
+        TestRunner.Run("layoutStickySnapAttachesPeerGroupToNearestScreenEdge", () =>
+        {
+            var win = new ScreenRect("windows", 1, 0, 0, 2560, 1440);
+            var mac = new ScreenRect("mac", 1, -1800, 20, 1728, 1117);
+            var snapped = new Layout(new[] { win, mac }).StickySnapped("mac", "windows");
+
+            Expect.True(snapped.ScreensFor("mac").SequenceEqual(new[]
+            {
+                new ScreenRect("mac", 1, -1728, 0, 1728, 1117),
+            }), "remote group should attach to the nearest local edge");
+        });
+
+        TestRunner.Run("layoutStickySnapSupportsTopPlacementWithOffset", () =>
+        {
+            var win = new ScreenRect("windows", 1, 0, 0, 2560, 1440);
+            var mac = new ScreenRect("mac", 1, 260, -1200, 1728, 1117);
+            var snapped = new Layout(new[] { win, mac }).StickySnapped("mac", "windows");
+
+            Expect.True(snapped.ScreensFor("mac").SequenceEqual(new[]
+            {
+                new ScreenRect("mac", 1, 260, -1117, 1728, 1117),
+            }), "remote group should attach above while preserving horizontal offset");
+        });
+
         TestRunner.Run("displayEnumeratorReturnsLocalLayout", () =>
         {
             var layout = DisplayEnumerator.LocalLayout("test-win");

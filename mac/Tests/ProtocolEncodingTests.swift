@@ -364,6 +364,26 @@ enum ProtocolEncodingTests {
             try expectEqual(moved.bounds(peerId: "mac"), ScreenRectBounds(minX: -1920, minY: 0, maxX: 2560, maxY: 1440))
         }
 
+        r.run("layoutStickySnapAttachesPeerGroupToNearestScreenEdge") {
+            let mac = ScreenRect(peerId: "mac", screenId: 1, x: 0, y: 0, width: 2560, height: 1440)
+            let win = ScreenRect(peerId: "windows", screenId: 1, x: -2000, y: 20, width: 1920, height: 1080)
+            let snapped = Layout(screens: [mac, win]).stickySnapped(peerId: "windows", toPeerId: "mac")
+
+            try expectEqual(snapped.screens(peerId: "windows"), [
+                ScreenRect(peerId: "windows", screenId: 1, x: -1920, y: 0, width: 1920, height: 1080),
+            ])
+        }
+
+        r.run("layoutStickySnapSupportsTopPlacementWithOffset") {
+            let mac = ScreenRect(peerId: "mac", screenId: 1, x: 0, y: 0, width: 2560, height: 1440)
+            let win = ScreenRect(peerId: "windows", screenId: 1, x: 260, y: -1200, width: 1920, height: 1080)
+            let snapped = Layout(screens: [mac, win]).stickySnapped(peerId: "windows", toPeerId: "mac")
+
+            try expectEqual(snapped.screens(peerId: "windows"), [
+                ScreenRect(peerId: "windows", screenId: 1, x: 260, y: -1080, width: 1920, height: 1080),
+            ])
+        }
+
         r.run("displayEnumeratorReturnsLocalLayout") {
             let layout = DisplayEnumerator.localLayout(peerId: "test-mac")
             try expect(!layout.screens.isEmpty, "expected at least one local screen")

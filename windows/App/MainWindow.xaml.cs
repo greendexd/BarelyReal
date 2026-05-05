@@ -369,7 +369,7 @@ public partial class MainWindow : Window
         var nativeLocal = new BarelyReal.Core.Layout.Layout(localNative).Bounds(LocalPeerId);
         if (incomingLocal is null || nativeLocal is null)
         {
-            _virtualLayout = new BarelyReal.Core.Layout.Layout(localNative.Concat(incoming.ScreensFor(RemotePeerId)));
+            _virtualLayout = SnappedRemoteLayout(new BarelyReal.Core.Layout.Layout(localNative.Concat(incoming.ScreensFor(RemotePeerId))));
             RefreshLayoutDesigner();
             return;
         }
@@ -378,7 +378,7 @@ public partial class MainWindow : Window
         var dy = nativeLocal.MinY - incomingLocal.MinY;
         var remote = incoming.ScreensFor(RemotePeerId)
             .Select(screen => screen with { X = screen.X + dx, Y = screen.Y + dy });
-        _virtualLayout = new BarelyReal.Core.Layout.Layout(localNative.Concat(remote));
+        _virtualLayout = SnappedRemoteLayout(new BarelyReal.Core.Layout.Layout(localNative.Concat(remote)));
         RefreshLayoutDesigner();
         AppendLog($"[{DateTime.Now:HH:mm:ss}] Layout synced from peer.");
     }
@@ -408,7 +408,7 @@ public partial class MainWindow : Window
             var updatedRemote = remoteScreens.Select(native => byId.TryGetValue(native.ScreenId, out var existing)
                 ? native with { X = existing.X, Y = existing.Y }
                 : native);
-            _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(updatedRemote));
+            _virtualLayout = SnappedRemoteLayout(new BarelyReal.Core.Layout.Layout(localScreens.Concat(updatedRemote)));
             return;
         }
 
@@ -416,14 +416,14 @@ public partial class MainWindow : Window
         var remoteBounds = new BarelyReal.Core.Layout.Layout(remoteScreens).Bounds(RemotePeerId);
         if (localBounds is null || remoteBounds is null)
         {
-            _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(remoteScreens));
+            _virtualLayout = SnappedRemoteLayout(new BarelyReal.Core.Layout.Layout(localScreens.Concat(remoteScreens)));
             return;
         }
 
         var dx = localBounds.MinX - remoteBounds.MaxX;
         var dy = localBounds.MinY - remoteBounds.MinY;
         var translated = remoteScreens.Select(screen => screen with { X = screen.X + dx, Y = screen.Y + dy });
-        _virtualLayout = new BarelyReal.Core.Layout.Layout(localScreens.Concat(translated));
+        _virtualLayout = SnappedRemoteLayout(new BarelyReal.Core.Layout.Layout(localScreens.Concat(translated)));
     }
 
     private void MoveRemoteGroup(int dx, int dy, bool snap)
@@ -437,23 +437,8 @@ public partial class MainWindow : Window
 
     private BarelyReal.Core.Layout.Layout SnappedRemoteLayout(BarelyReal.Core.Layout.Layout layout)
     {
-        var local = layout.Bounds(LocalPeerId);
-        var remote = layout.Bounds(RemotePeerId);
-        if (local is null || remote is null) return layout;
-
-        var candidates = new (int Dx, int Dy, int Distance)[]
-        {
-            (local.MinX - remote.MaxX, 0, Math.Abs(local.MinX - remote.MaxX)),
-            (local.MaxX - remote.MinX, 0, Math.Abs(local.MaxX - remote.MinX)),
-            (0, local.MinY - remote.MaxY, Math.Abs(local.MinY - remote.MaxY)),
-            (0, local.MaxY - remote.MinY, Math.Abs(local.MaxY - remote.MinY)),
-        };
-        var best = candidates.OrderBy(candidate => candidate.Distance).First();
-        if (best.Distance > LayoutSnapThreshold) return layout;
-        return layout.Translated(RemotePeerId, best.Dx, best.Dy);
+        return layout.StickySnapped(RemotePeerId, LocalPeerId);
     }
-
-    private const int LayoutSnapThreshold = 32;
 
     // MARK: - Status
 

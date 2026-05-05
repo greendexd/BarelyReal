@@ -68,6 +68,24 @@ public struct Layout: Equatable, Codable {
             )
         })
     }
+
+    public func stickySnapped(peerId movingPeerId: String, toPeerId anchorPeerId: String) -> Layout {
+        guard let moving = bounds(peerId: movingPeerId) else { return self }
+        let anchors = screens(peerId: anchorPeerId)
+        guard !anchors.isEmpty else { return self }
+
+        var best: SnapCandidate?
+        for anchor in anchors.map(ScreenRectBounds.init) {
+            for candidate in SnapCandidate.candidates(moving: moving, anchor: anchor) {
+                if best == nil || candidate.score < best!.score {
+                    best = candidate
+                }
+            }
+        }
+
+        guard let best else { return self }
+        return translated(peerId: movingPeerId, dx: best.dx, dy: best.dy)
+    }
 }
 
 public struct ScreenRectBounds: Equatable {
@@ -99,6 +117,89 @@ public struct ScreenRectBounds: Equatable {
             maxX: max(maxX, screen.maxX),
             maxY: max(maxY, screen.maxY)
         )
+    }
+}
+
+private struct SnapCandidate {
+    let dx: Int
+    let dy: Int
+    let score: Int
+
+    static func candidates(moving: ScreenRectBounds, anchor: ScreenRectBounds) -> [SnapCandidate] {
+        let left = candidate(
+            moving: moving,
+            x: anchor.minX - moving.width,
+            y: alignedStart(
+                movingStart: moving.minY,
+                movingEnd: moving.maxY,
+                anchorStart: anchor.minY,
+                anchorEnd: anchor.maxY,
+                length: moving.height
+            )
+        )
+        let right = candidate(
+            moving: moving,
+            x: anchor.maxX,
+            y: alignedStart(
+                movingStart: moving.minY,
+                movingEnd: moving.maxY,
+                anchorStart: anchor.minY,
+                anchorEnd: anchor.maxY,
+                length: moving.height
+            )
+        )
+        let top = candidate(
+            moving: moving,
+            x: alignedStart(
+                movingStart: moving.minX,
+                movingEnd: moving.maxX,
+                anchorStart: anchor.minX,
+                anchorEnd: anchor.maxX,
+                length: moving.width
+            ),
+            y: anchor.minY - moving.height
+        )
+        let bottom = candidate(
+            moving: moving,
+            x: alignedStart(
+                movingStart: moving.minX,
+                movingEnd: moving.maxX,
+                anchorStart: anchor.minX,
+                anchorEnd: anchor.maxX,
+                length: moving.width
+            ),
+            y: anchor.maxY
+        )
+        return [left, right, top, bottom]
+    }
+
+    private static func candidate(moving: ScreenRectBounds, x: Int, y: Int) -> SnapCandidate {
+        let dx = x - moving.minX
+        let dy = y - moving.minY
+        return SnapCandidate(dx: dx, dy: dy, score: abs(dx) + abs(dy))
+    }
+
+    private static func alignedStart(
+        movingStart: Int,
+        movingEnd: Int,
+        anchorStart: Int,
+        anchorEnd: Int,
+        length: Int
+    ) -> Int {
+        let cornerSnap = 96
+        if abs(movingStart - anchorStart) <= cornerSnap {
+            return anchorStart
+        }
+        if abs(movingEnd - anchorEnd) <= cornerSnap {
+            return anchorEnd - length
+        }
+        if movingEnd <= anchorStart {
+            return anchorStart
+        }
+        if movingStart >= anchorEnd {
+            return anchorEnd - length
+        }
+        return movingStart
     }
 }
 

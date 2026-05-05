@@ -301,7 +301,7 @@ final class BarelyRealStore: ObservableObject {
         guard let incomingLocal = incoming.bounds(peerId: localPeerId),
               let nativeLocal = Layout(screens: localNative).bounds(peerId: localPeerId)
         else {
-            virtualLayout = Layout(screens: localNative + incoming.screens(peerId: remotePeerId))
+            virtualLayout = snappedRemoteLayout(Layout(screens: localNative + incoming.screens(peerId: remotePeerId)))
             saveLayoutState()
             return
         }
@@ -311,7 +311,7 @@ final class BarelyRealStore: ObservableObject {
         let translatedRemote = incoming.screens(peerId: remotePeerId).map {
             ScreenRect(peerId: $0.peerId, screenId: $0.screenId, x: $0.x + dx, y: $0.y + dy, width: $0.width, height: $0.height)
         }
-        virtualLayout = Layout(screens: localNative + translatedRemote)
+        virtualLayout = snappedRemoteLayout(Layout(screens: localNative + translatedRemote))
         saveLayoutState()
         appendLog("Layout synced from peer")
     }
@@ -339,14 +339,14 @@ final class BarelyRealStore: ObservableObject {
                 }
                 return native
             }
-            virtualLayout = Layout(screens: localScreens + updatedRemote)
+            virtualLayout = snappedRemoteLayout(Layout(screens: localScreens + updatedRemote))
             return
         }
 
         let localBounds = Layout(screens: localScreens).bounds(peerId: localPeerId)
         let remoteBounds = Layout(screens: remoteScreens).bounds(peerId: remotePeerId)
         guard let localBounds, let remoteBounds else {
-            virtualLayout = Layout(screens: localScreens + remoteScreens)
+            virtualLayout = snappedRemoteLayout(Layout(screens: localScreens + remoteScreens))
             return
         }
 
@@ -355,23 +355,11 @@ final class BarelyRealStore: ObservableObject {
         let translatedRemote = remoteScreens.map {
             ScreenRect(peerId: remotePeerId, screenId: $0.screenId, x: $0.x + dx, y: $0.y + dy, width: $0.width, height: $0.height)
         }
-        virtualLayout = Layout(screens: localScreens + translatedRemote)
+        virtualLayout = snappedRemoteLayout(Layout(screens: localScreens + translatedRemote))
     }
 
     private func snappedRemoteLayout(_ layout: Layout) -> Layout {
-        guard let local = layout.bounds(peerId: localPeerId),
-              let remote = layout.bounds(peerId: remotePeerId)
-        else { return layout }
-
-        let candidates: [(dx: Int, dy: Int, distance: Int)] = [
-            (local.minX - remote.maxX, 0, abs(local.minX - remote.maxX)),
-            (local.maxX - remote.minX, 0, abs(local.maxX - remote.minX)),
-            (0, local.minY - remote.maxY, abs(local.minY - remote.maxY)),
-            (0, local.maxY - remote.minY, abs(local.maxY - remote.minY)),
-        ]
-        guard let best = candidates.min(by: { $0.distance < $1.distance }) else { return layout }
-        guard best.distance <= Self.layoutSnapThreshold else { return layout }
-        return layout.translated(peerId: remotePeerId, dx: best.dx, dy: best.dy)
+        layout.stickySnapped(peerId: remotePeerId, toPeerId: localPeerId)
     }
 
     private func saveLayoutState() {
@@ -457,7 +445,6 @@ final class BarelyRealStore: ObservableObject {
         return formatter
     }()
 
-    private static let layoutSnapThreshold = 32
 }
 
 struct ConnectionSettings {

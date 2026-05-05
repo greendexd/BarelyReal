@@ -53,20 +53,18 @@ public partial class LayoutCanvas : UserControl
         foreach (var screen in _layout.ScreensFor(_localPeerId))
             DrawScreen(screen, bounds, "This PC", "#0067C0", "🖥", false);
 
-        foreach (var screen in _layout.ScreensFor(_remotePeerId))
-            DrawScreen(
-                screen with
-                {
-                    X = screen.X + (int)Math.Round(_dragX / Math.Max(_scale, 0.001)),
-                    Y = screen.Y + (int)Math.Round(_dragY / Math.Max(_scale, 0.001))
-                },
-                bounds,
-                "Mac",
-                _remoteIsStale ? "#C19C00" : "#7B61FF",
-                "💻",
-                true);
+        var dragDx = (int)Math.Round(_dragX / Math.Max(_scale, 0.001));
+        var dragDy = (int)Math.Round(_dragY / Math.Max(_scale, 0.001));
+        var remoteScreens = _layout.ScreensFor(_remotePeerId);
+        var previewLayout = _layout.Translated(_remotePeerId, dragDx, dragDy).StickySnapped(_remotePeerId, _localPeerId);
+        var previewRemoteScreens = remoteScreens.Count == 0
+            ? Array.Empty<ScreenRect>()
+            : previewLayout.ScreensFor(_remotePeerId);
 
-        if (_layout.ScreensFor(_remotePeerId).Count == 0)
+        foreach (var screen in previewRemoteScreens)
+            DrawScreen(screen, bounds, "Mac", _remoteIsStale ? "#C19C00" : "#7B61FF", "💻", true);
+
+        if (remoteScreens.Count == 0)
             DrawEmptyState(canvasW, canvasH);
     }
 
