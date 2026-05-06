@@ -1,5 +1,6 @@
 import ApplicationServices
 import AppKit
+import IOKit.hid
 
 final class StatusItemController {
     private var statusItem: NSStatusItem?
@@ -44,7 +45,10 @@ final class StatusItemController {
     }
 
     @objc private func openInputMonitoringSettings() {
-        openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            self.openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        }
     }
 
     @objc private func refreshPermissions() {

@@ -150,11 +150,15 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func openInputMonitoringSettings() {
-        openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        requestInputMonitoring()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.openSystemSettings("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+        }
     }
 
     func requestInputMonitoring() {
-        IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+        appendLog(granted ? "Input Monitoring granted" : "Input Monitoring requested; enable BarelyReal in System Settings")
         refreshPermissions()
     }
 
@@ -164,6 +168,9 @@ final class BarelyRealStore: ObservableObject {
         refreshPermissions()
         appendLog("Reset BarelyReal permissions. Enable Accessibility and Input Monitoring again.")
         openAccessibilitySettings()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
+            self?.openInputMonitoringSettings()
+        }
     }
 
     private func startReceiver(settings: ConnectionSettings) {

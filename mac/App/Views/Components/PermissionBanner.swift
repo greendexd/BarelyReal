@@ -31,7 +31,7 @@ struct PermissionBanner: View {
                                 .controlSize(.small)
                         }
                         if !inputMonitoringGranted {
-                            Button("Open Input Monitoring", action: onOpenInputMonitoring)
+                            Button("Request Input Monitoring", action: onOpenInputMonitoring)
                                 .controlSize(.small)
                         }
                         Button("Refresh", systemImage: "arrow.clockwise", action: onRefresh)

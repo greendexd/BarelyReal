@@ -70,19 +70,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-cat > "$APP_DIR/Contents/Entitlements.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>com.apple.security.device.input-monitoring</key>
-  <true/>
-</dict>
-</plist>
-PLIST
-
 printf "APPL????" > "$APP_DIR/Contents/PkgInfo"
 
-codesign --force --deep --sign - --entitlements "$APP_DIR/Contents/Entitlements.plist" "$APP_DIR" >/dev/null
+codesign --force --deep --sign - "$APP_DIR" >/dev/null
 
 echo "$APP_DIR"
