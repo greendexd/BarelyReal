@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import BarelyRealCore
 import CoreGraphics
@@ -21,6 +22,7 @@ final class MacKmSession {
     private var heartbeatPump: KmHeartbeatPump?
     private var heartbeatSeq: UInt32 = 1_000_000_000
     private let hotkey = HotkeyManager()
+    private var safetyObserverTokens: [NSObjectProtocol] = []
 
     init(
         peerHost: String,
@@ -61,6 +63,11 @@ final class MacKmSession {
 
         tap.scrollSpeed = scrollSpeed
         tap.suppressLocalEvents = bridge.shouldSuppressLocalEvents
+        tap.onEmergencyReturn = { [weak bridge, weak tap] in
+            guard let bridge else { return }
+            bridge.forceReturnLocal(reason: "Emergency return to Mac (Ctrl+Option+Command+Esc)")
+            tap?.suppressLocalEvents = bridge.shouldSuppressLocalEvents
+        }
         tap.onFrame = { [weak self, weak bridge, weak tap] frame in
             guard let self, let bridge else { return }
             let didSend = bridge.handle(frame)
@@ -98,9 +105,11 @@ final class MacKmSession {
             self.log("Force-switch: \(bridge.isRemote ? "entered remote" : "back to Mac")")
         }
         hotkey.register()
+        installSafetyObservers()
     }
 
     func stop() {
+        removeSafetyObservers()
         hotkey.unregister()
         heartbeatPump?.stop()
         heartbeatPump = nil
@@ -108,6 +117,35 @@ final class MacKmSession {
         bridge?.stop()
         bridge = nil
         stream.close()
+    }
+
+    private func installSafetyObservers() {
+        removeSafetyObservers()
+        let center = NSWorkspace.shared.notificationCenter
+        let notifications: [(Notification.Name, String)] = [
+            (NSWorkspace.sessionDidResignActiveNotification, "Returned to Mac because macOS session resigned active"),
+            (NSWorkspace.screensDidSleepNotification, "Returned to Mac because displays went to sleep"),
+            (NSWorkspace.willSleepNotification, "Returned to Mac because Mac is going to sleep"),
+        ]
+
+        safetyObserverTokens = notifications.map { notification, reason in
+            center.addObserver(forName: notification, object: nil, queue: .main) { [weak self] _ in
+                self?.forceReturnToMac(reason: reason)
+            }
+        }
+    }
+
+    private func removeSafetyObservers() {
+        let center = NSWorkspace.shared.notificationCenter
+        for token in safetyObserverTokens {
+            center.removeObserver(token)
+        }
+        safetyObserverTokens.removeAll()
+    }
+
+    private func forceReturnToMac(reason: String) {
+        bridge?.forceReturnLocal(reason: reason)
+        tap.suppressLocalEvents = bridge?.shouldSuppressLocalEvents ?? false
     }
 }
 
@@ -220,7 +258,7 @@ private final class EdgeBridge {
         }
 
         if shouldReturnLocal(for: frame) {
-            returnLocal()
+            returnLocal(reason: "Returned to Mac")
             return false
         }
 
@@ -231,7 +269,7 @@ private final class EdgeBridge {
     }
 
     func stop() {
-        returnLocal()
+        returnLocal(reason: "Returned to Mac")
     }
 
     func sendBypassingEdge(_ frame: KmFrame) {
@@ -240,7 +278,7 @@ private final class EdgeBridge {
 
     func toggleRemote() {
         if isRemoteActive {
-            returnLocal()
+            returnLocal(reason: "Returned to Mac")
             return
         }
 
@@ -256,6 +294,14 @@ private final class EdgeBridge {
             type: .mouseMoveRel,
             payload: KmPayload.encodeMouseMove(.init(x: 0, y: 0))
         )).map { stream.send($0, to: endpoint) }
+    }
+
+    func forceReturnLocal(reason: String) {
+        guard isRemoteActive else {
+            log("\(reason): already on Mac")
+            return
+        }
+        returnLocal(reason: reason)
     }
 
     private func entryFrameIfCrossing(_ frame: KmFrame) -> KmFrame? {
@@ -319,7 +365,7 @@ private final class EdgeBridge {
         remoteVirtualPoint = CGPoint(x: point.x + CGFloat(move.x), y: point.y + CGFloat(move.y))
     }
 
-    private func returnLocal() {
+    private func returnLocal(reason: String) {
         guard isRemoteActive else { return }
         isRemoteActive = false
         guardController.stop()
@@ -328,7 +374,7 @@ private final class EdgeBridge {
         }
         remoteVirtualPoint = nil
         pinnedLocalPoint = nil
-        log("Returned to Mac")
+        log(reason)
     }
 
     private func remoteNativePoint(for virtualPoint: CGPoint, in layoutScreen: ScreenRect) -> CGPoint {

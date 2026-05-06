@@ -57,6 +57,27 @@ struct SettingsView: View {
                 }
 
                 section(title: "Privacy & safety", icon: "lock.shield") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "keyboard")
+                                .foregroundStyle(.secondary)
+                            Text("Emergency return to Mac")
+                                .font(.callout.weight(.medium))
+                            Spacer()
+                            Text("⌃⌥⌘Esc")
+                                .font(.system(.callout, design: .monospaced).weight(.semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(Color(nsColor: .separatorColor).opacity(0.25),
+                                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                        Text("Always releases the Mac cursor and keyboard, even while Windows is active.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Divider()
+
                     Toggle(isOn: $lockOnDisconnect) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Lock display when KM link drops")

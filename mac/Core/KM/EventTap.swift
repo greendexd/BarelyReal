@@ -9,6 +9,7 @@ public final class EventTap {
     }
 
     public var onFrame: ((KmFrame) -> Void)?
+    public var onEmergencyReturn: (() -> Void)?
     public var suppressLocalEvents = false
     public var scrollSpeed: Int {
         get { scrollSpeedLevel }
@@ -103,6 +104,11 @@ public final class EventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
             return Unmanaged.passUnretained(event)
+        }
+
+        if Self.isEmergencyReturnHotkey(type: type, event: event) {
+            onEmergencyReturn?()
+            return nil
         }
 
         for frame in frames(for: type, event: event) {
@@ -234,6 +240,21 @@ public final class EventTap {
         UInt64(Date().timeIntervalSince1970 * 1_000_000)
     }
 
+    public static func isEmergencyReturnHotkey(keyCode: UInt16, flagsRaw: UInt64) -> Bool {
+        guard keyCode == emergencyReturnKey else { return false }
+        let flags = CGEventFlags(rawValue: flagsRaw)
+        return flags.contains(.maskControl)
+            && flags.contains(.maskAlternate)
+            && flags.contains(.maskCommand)
+    }
+
+    private static func isEmergencyReturnHotkey(type: CGEventType, event: CGEvent) -> Bool {
+        guard type == .keyDown else { return false }
+        guard event.getIntegerValueField(.keyboardEventAutorepeat) == 0 else { return false }
+        let keyCode = UInt16(clamping: event.getIntegerValueField(.keyboardEventKeycode))
+        return isEmergencyReturnHotkey(keyCode: keyCode, flagsRaw: event.flags.rawValue)
+    }
+
     private static func modifierFlag(for keyCode: UInt16) -> CGEventFlags? {
         switch keyCode {
         case 0x38, 0x3C: return .maskShift
@@ -245,4 +266,5 @@ public final class EventTap {
     }
 
     private static let capsLockKey: UInt16 = 0x39
+    private static let emergencyReturnKey: UInt16 = 0x35 // Escape
 }

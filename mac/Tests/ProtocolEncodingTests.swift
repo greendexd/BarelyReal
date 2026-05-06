@@ -1,5 +1,6 @@
 import Foundation
 import BarelyRealCore
+import CoreGraphics
 
 @MainActor
 enum ProtocolEncodingTests {
@@ -304,6 +305,13 @@ enum ProtocolEncodingTests {
             try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0xE052), 0x72) // Insert / Help
             try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0xE048), 0x7E) // Up
             try expectEqual(EventInjector.macVirtualKeyForWindowsScanCode(0x37), 0x43) // Keypad *
+        }
+
+        r.run("eventTapEmergencyReturnHotkeyRequiresControlOptionCommandEscape") {
+            let flags = CGEventFlags([.maskControl, .maskAlternate, .maskCommand]).rawValue
+            try expect(EventTap.isEmergencyReturnHotkey(keyCode: 0x35, flagsRaw: flags), "expected Ctrl+Option+Command+Esc to be a panic return")
+            try expect(!EventTap.isEmergencyReturnHotkey(keyCode: 0x35, flagsRaw: CGEventFlags([.maskAlternate, .maskCommand]).rawValue), "missing Ctrl must not trigger panic return")
+            try expect(!EventTap.isEmergencyReturnHotkey(keyCode: 0x01, flagsRaw: flags), "non-Escape key must not trigger panic return")
         }
 
         r.run("layoutEngineFindsContainingScreen") {
