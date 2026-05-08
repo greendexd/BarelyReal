@@ -17,10 +17,13 @@ public sealed class UdpKmStream : IDisposable
     private CancellationTokenSource? _cts;
     private UdpKmSourceFilter _sourceFilter = UdpKmSourceFilter.Disabled;
     private byte[]? _authKey;
+    private readonly UdpKmReplayGuard _replayGuard = new();
     private ulong _droppedFrames;
     private ulong _authFailures;
+    private ulong _replayDrops;
     private DateTime _lastDropLogUtc = DateTime.MinValue;
     private DateTime _lastAuthFailureLogUtc = DateTime.MinValue;
+    private DateTime _lastReplayDropLogUtc = DateTime.MinValue;
 
     public UdpKmStream(string? sharedSecret = null)
     {
@@ -42,8 +45,11 @@ public sealed class UdpKmStream : IDisposable
         _sourceFilter = UdpKmSourceFilter.FromHost(expectedPeerHost);
         _droppedFrames = 0;
         _authFailures = 0;
+        _replayDrops = 0;
         _lastDropLogUtc = DateTime.MinValue;
         _lastAuthFailureLogUtc = DateTime.MinValue;
+        _lastReplayDropLogUtc = DateTime.MinValue;
+        ResetReplayProtection();
         _client = new UdpClient(new IPEndPoint(IPAddress.Any, localPort));
         _cts = new CancellationTokenSource();
         if (_sourceFilter.Enabled)
@@ -62,11 +68,17 @@ public sealed class UdpKmStream : IDisposable
         client.Send(payload, payload.Length, peerHost, peerPort);
     }
 
+    public void ResetReplayProtection()
+    {
+        _replayGuard.Reset();
+    }
+
     public void Close()
     {
         _cts?.Cancel();
         _client?.Dispose();
         _cts?.Dispose();
+        ResetReplayProtection();
 
         _client = null;
         _cts = null;
@@ -98,7 +110,14 @@ public sealed class UdpKmStream : IDisposable
                     $"UDP frame received bytes len={payload.Length} from={result.RemoteEndPoint} hex={PreviewHex(payload)}");
                 try
                 {
-                    OnFrame?.Invoke(KmFrameCodec.Decode(payload));
+                    var frame = KmFrameCodec.Decode(payload);
+                    if (IsAuthenticationEnabled && !_replayGuard.TryAccept(frame, out var replayFailure))
+                    {
+                        LogReplayDrop(result.RemoteEndPoint, frame, replayFailure);
+                        continue;
+                    }
+
+                    OnFrame?.Invoke(frame);
                 }
                 catch (BrpCodecException ex)
                 {
@@ -126,6 +145,18 @@ public sealed class UdpKmStream : IDisposable
             _lastDropLogUtc = now;
             LogLine?.Invoke(
                 $"UDP frame dropped from unexpected source {remoteEndPoint}; expected {_sourceFilter.Description}; dropped={_droppedFrames}");
+        }
+    }
+
+    private void LogReplayDrop(IPEndPoint remoteEndPoint, KmFrame frame, string reason)
+    {
+        _replayDrops++;
+        var now = DateTime.UtcNow;
+        if (_replayDrops <= 3 || _replayDrops % 100 == 0 || now - _lastReplayDropLogUtc >= TimeSpan.FromSeconds(30))
+        {
+            _lastReplayDropLogUtc = now;
+            LogLine?.Invoke(
+                $"UDP KM replay dropped from {remoteEndPoint}: seq={frame.Seq} type={frame.Type} reason={reason}; dropped={_replayDrops}");
         }
     }
 
@@ -169,6 +200,89 @@ public sealed class UdpKmStream : IDisposable
         var previewLength = Math.Min(bytes.Length, maxPreviewBytes);
         var hex = Convert.ToHexString(bytes.AsSpan(0, previewLength));
         return bytes.Length > maxPreviewBytes ? $"{hex}..." : hex;
+    }
+}
+
+public sealed class UdpKmReplayGuard
+{
+    public const uint WindowSize = 1024;
+
+    private readonly LaneState _flow = new();
+    private readonly LaneState _input = new();
+
+    public void Reset()
+    {
+        _flow.Reset();
+        _input.Reset();
+    }
+
+    public bool TryAccept(KmFrame frame, out string failure)
+    {
+        var lane = IsFlow(frame.Type) ? _flow : _input;
+        return lane.TryAccept(frame.Seq, out failure);
+    }
+
+    private static bool IsFlow(KmType type) => type is KmType.Heartbeat or KmType.ClockSync;
+
+    private sealed class LaneState
+    {
+        private readonly HashSet<uint> _accepted = new();
+        private bool _hasMaxSeen;
+        private uint _maxSeen;
+
+        public void Reset()
+        {
+            _accepted.Clear();
+            _hasMaxSeen = false;
+            _maxSeen = 0;
+        }
+
+        public bool TryAccept(uint seq, out string failure)
+        {
+            if (!_hasMaxSeen)
+            {
+                _hasMaxSeen = true;
+                _maxSeen = seq;
+                _accepted.Add(seq);
+                failure = string.Empty;
+                return true;
+            }
+
+            if (IsNewer(seq, _maxSeen))
+            {
+                _maxSeen = seq;
+                Prune();
+                _accepted.Add(seq);
+                failure = string.Empty;
+                return true;
+            }
+
+            if (IsOlderThanWindow(seq, _maxSeen))
+            {
+                failure = "older than replay window";
+                return false;
+            }
+
+            if (!_accepted.Add(seq))
+            {
+                failure = "duplicate sequence";
+                return false;
+            }
+
+            failure = string.Empty;
+            return true;
+        }
+
+        private void Prune()
+        {
+            _accepted.RemoveWhere(seq => IsOlderThanWindow(seq, _maxSeen));
+        }
+
+        private static bool IsNewer(uint seq, uint maxSeen) =>
+            seq != maxSeen && unchecked((int)(seq - maxSeen)) > 0;
+
+        private static bool IsOlderThanWindow(uint seq, uint maxSeen) =>
+            seq != maxSeen && !IsNewer(seq, maxSeen) && unchecked(maxSeen - seq) > WindowSize;
     }
 }
 

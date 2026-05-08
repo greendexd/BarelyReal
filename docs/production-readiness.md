@@ -41,7 +41,8 @@ The repository is in early development. Current strengths:
   `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - Dev KM works over UDP `24801` with trusted peer IP source filtering and
   optional `BRKM` HMAC-SHA256 datagram authentication via a session-only shared
-  secret.
+  secret. Authenticated dev mode also drops duplicate and old KM frames with a
+  1024-frame replay window.
 - Dev clipboard sync uses TCP `24802` for text, PNG images, and file bundles.
 - Pairing, identity, TLS, mDNS, file transfer, and release packaging have
   scaffolding or docs, but not enough enforced behavior for public release.

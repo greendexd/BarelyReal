@@ -129,6 +129,7 @@ internal sealed class DevReceiverService : IDisposable
 
             case KmLinkMonitor.Event.LinkLost:
                 LinkUp = false;
+                _stream?.ResetReplayProtection();
                 Log($"KM link lost (silent for {silent.TotalMilliseconds:F0} ms).");
                 StatsChanged?.Invoke();
                 break;

@@ -125,6 +125,49 @@ internal static class ProtocolEncodingTests
             Expect.Equal(failure, "missing BRKM auth envelope");
         });
 
+        TestRunner.Run("udpKmReplayGuardDropsDuplicate", () =>
+        {
+            var guard = new UdpKmReplayGuard();
+            var frame = new KmFrame(42, 0, KmType.KeyDown);
+
+            Expect.True(guard.TryAccept(frame, out var firstFailure), firstFailure);
+            Expect.True(!guard.TryAccept(frame, out var duplicateFailure), "duplicate must be dropped");
+            Expect.Equal(duplicateFailure, "duplicate sequence");
+        });
+
+        TestRunner.Run("udpKmReplayGuardDropsOldWindow", () =>
+        {
+            var guard = new UdpKmReplayGuard();
+
+            Expect.True(guard.TryAccept(new KmFrame(10, 0, KmType.KeyDown), out var firstFailure), firstFailure);
+            Expect.True(guard.TryAccept(new KmFrame(10 + UdpKmReplayGuard.WindowSize + 1, 0, KmType.KeyDown), out var nextFailure), nextFailure);
+            Expect.True(!guard.TryAccept(new KmFrame(10, 0, KmType.KeyDown), out var oldFailure), "old frame must be dropped");
+            Expect.Equal(oldFailure, "older than replay window");
+        });
+
+        TestRunner.Run("udpKmReplayGuardAcceptsOutOfOrderWithinWindowOnce", () =>
+        {
+            var guard = new UdpKmReplayGuard();
+
+            Expect.True(guard.TryAccept(new KmFrame(100, 0, KmType.KeyDown), out var firstFailure), firstFailure);
+            Expect.True(guard.TryAccept(new KmFrame(110, 0, KmType.KeyDown), out var nextFailure), nextFailure);
+            Expect.True(guard.TryAccept(new KmFrame(105, 0, KmType.KeyUp), out var outOfOrderFailure), outOfOrderFailure);
+            Expect.True(!guard.TryAccept(new KmFrame(105, 0, KmType.KeyUp), out var duplicateFailure), "out-of-order duplicate must be dropped");
+            Expect.Equal(duplicateFailure, "duplicate sequence");
+        });
+
+        TestRunner.Run("udpKmReplayGuardKeepsFlowAndInputLanesSeparate", () =>
+        {
+            var guard = new UdpKmReplayGuard();
+
+            Expect.True(guard.TryAccept(new KmFrame(1_000_000_000, 0, KmType.Heartbeat), out var heartbeatFailure), heartbeatFailure);
+            Expect.True(guard.TryAccept(new KmFrame(0, 0, KmType.KeyDown), out var inputFailure), inputFailure);
+            Expect.True(!guard.TryAccept(new KmFrame(1_000_000_000, 0, KmType.ClockSync), out var flowDuplicateFailure), "flow duplicate must be dropped");
+            Expect.Equal(flowDuplicateFailure, "duplicate sequence");
+            Expect.True(!guard.TryAccept(new KmFrame(0, 0, KmType.KeyUp), out var inputDuplicateFailure), "input duplicate must be dropped");
+            Expect.Equal(inputDuplicateFailure, "duplicate sequence");
+        });
+
         TestRunner.Run("kmFrameTruncatedThrows", () =>
         {
             Expect.Throws<BrpCodecException>(() => KmFrameCodec.Decode(new byte[] { 0x01, 0x02, 0x03 }));

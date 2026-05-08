@@ -141,9 +141,12 @@ struct DevKmEnvelope {
 ```
 
 The HMAC key is `SHA256("BarelyReal UDP KM v1\\0" || trim(shared_secret))`.
-This is a dev-mode authentication guard only; it does not provide
-confidentiality or replay protection and must be replaced by the AEAD layer for
-release builds.
+Receivers apply replay rejection only in authenticated mode, using separate
+1024-frame windows for flow frames (`Heartbeat`, `ClockSync`) and input frames
+(mouse/keyboard/modifiers). This split is required while the dev senders still
+use separate sequence ranges for heartbeat and input. The envelope is a
+dev-mode authentication guard only; it does not provide confidentiality and
+must be replaced by the AEAD layer for release builds.
 
 ### `KmType`
 

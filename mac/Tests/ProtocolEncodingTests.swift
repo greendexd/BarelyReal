@@ -456,5 +456,28 @@ enum ProtocolEncodingTests {
                 _ = try authenticator.open(tampered)
             }
         }
+
+        r.run("udpKmReplayGuardSplitsFlowAndInputLanes") {
+            let guarder = UdpKmReplayGuard()
+            try expect(guarder.accepts(KmFrame(seq: 1_000_000_000, timestampUs: 0, type: .heartbeat)), "first heartbeat should pass")
+            try expect(guarder.accepts(KmFrame(seq: 0, timestampUs: 0, type: .mouseMoveRel)), "first input seq 0 should pass despite high heartbeat seq")
+        }
+
+        r.run("udpKmReplayGuardRejectsDuplicateAndOldFrames") {
+            let guarder = UdpKmReplayGuard(windowSize: 4)
+            for seq in 10...15 {
+                try expect(guarder.accepts(KmFrame(seq: UInt32(seq), timestampUs: 0, type: .keyDown)), "seq \(seq) should pass")
+            }
+            try expect(!guarder.accepts(KmFrame(seq: 14, timestampUs: 0, type: .keyDown)), "duplicate within window should fail")
+            try expect(!guarder.accepts(KmFrame(seq: 10, timestampUs: 0, type: .keyDown)), "old frame outside window should fail")
+        }
+
+        r.run("udpKmReplayGuardAllowsOutOfOrderWithinWindowOnce") {
+            let guarder = UdpKmReplayGuard(windowSize: 4)
+            try expect(guarder.accepts(KmFrame(seq: 10, timestampUs: 0, type: .mouseScroll)), "seq 10 should pass")
+            try expect(guarder.accepts(KmFrame(seq: 12, timestampUs: 0, type: .mouseScroll)), "seq 12 should pass")
+            try expect(guarder.accepts(KmFrame(seq: 11, timestampUs: 0, type: .mouseScroll)), "out-of-order seq 11 should pass once")
+            try expect(!guarder.accepts(KmFrame(seq: 11, timestampUs: 0, type: .mouseScroll)), "duplicate out-of-order seq 11 should fail")
+        }
     }
 }

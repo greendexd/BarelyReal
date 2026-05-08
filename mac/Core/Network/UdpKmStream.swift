@@ -21,6 +21,7 @@ public final class UdpKmStream {
     private var listener: NWListener?
     private var connections: [String: NWConnection] = [:]
     private var authenticator: UdpKmAuthenticator?
+    private let replayGuard = UdpKmReplayGuard()
 
     public init(queue: DispatchQueue = DispatchQueue(label: "com.barelyreal.udp-km")) {
         self.queue = queue
@@ -32,6 +33,7 @@ public final class UdpKmStream {
         }
 
         close()
+        replayGuard.reset()
 
         let listener = try NWListener(using: .udp, on: port)
         listener.newConnectionHandler = { [weak self] connection in
@@ -52,6 +54,7 @@ public final class UdpKmStream {
     }
 
     public func close() {
+        replayGuard.reset()
         listener?.cancel()
         listener = nil
 
@@ -59,6 +62,10 @@ public final class UdpKmStream {
             connection.cancel()
         }
         connections.removeAll()
+    }
+
+    public func resetReplayProtection() {
+        replayGuard.reset()
     }
 
     private func startInbound(_ connection: NWConnection) {
@@ -81,6 +88,10 @@ public final class UdpKmStream {
                         decodedContent = content
                     }
                     let frame = try KmFrameCodec.decode(decodedContent)
+                    if authenticator != nil && !replayGuard.accepts(frame) {
+                        self.onDrop?("UDP KM replay dropped from \(connection.endpoint): seq=\(frame.seq) type=\(frame.type)")
+                        return
+                    }
                     self.onFrame?(frame)
                     self.onFrameFrom?(frame, connection.endpoint)
                 } catch let error as UdpKmAuthenticationError {

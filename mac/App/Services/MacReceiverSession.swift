@@ -64,6 +64,7 @@ final class MacReceiverSession {
 
             case .linkLost(let silent):
                 self.isLinkUp = false
+                self.stream.resetReplayProtection()
                 self.log(String(format: "KM link lost (silent for %.0f ms).", silent * 1000))
                 DispatchQueue.main.async { self.onLinkChange?(false) }
 
