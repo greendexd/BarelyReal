@@ -10,10 +10,17 @@ public final class UdpKmStream {
 
     public var onFrame: ((KmFrame) -> Void)?
     public var onFrameFrom: ((KmFrame, NWEndpoint) -> Void)?
+    public var onDrop: ((String) -> Void)?
+    public var authenticationSecret: String? {
+        didSet {
+            authenticator = authenticationSecret.flatMap(UdpKmAuthenticator.init(sharedSecret:))
+        }
+    }
 
     private let queue: DispatchQueue
     private var listener: NWListener?
     private var connections: [String: NWConnection] = [:]
+    private var authenticator: UdpKmAuthenticator?
 
     public init(queue: DispatchQueue = DispatchQueue(label: "com.barelyreal.udp-km")) {
         self.queue = queue
@@ -35,7 +42,8 @@ public final class UdpKmStream {
     }
 
     public func send(_ frame: KmFrame, to peer: NWEndpoint) {
-        let payload = KmFrameCodec.encode(frame)
+        let encoded = KmFrameCodec.encode(frame)
+        let payload = authenticator?.seal(encoded) ?? encoded
         queue.async { [weak self] in
             guard let self else { return }
             let connection = self.connection(to: peer)
@@ -66,9 +74,17 @@ public final class UdpKmStream {
 
             if let content {
                 do {
-                    let frame = try KmFrameCodec.decode(content)
+                    let decodedContent: Data
+                    if let authenticator {
+                        decodedContent = try authenticator.open(content)
+                    } else {
+                        decodedContent = content
+                    }
+                    let frame = try KmFrameCodec.decode(decodedContent)
                     self.onFrame?(frame)
                     self.onFrameFrom?(frame, connection.endpoint)
+                } catch let error as UdpKmAuthenticationError {
+                    self.onDrop?("UDP KM authentication failed from \(connection.endpoint): \(error)")
                 } catch {
                     // Malformed UDP datagrams are dropped. Control channel will own reconnect policy.
                 }

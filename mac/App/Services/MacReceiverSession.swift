@@ -19,6 +19,7 @@ final class MacReceiverSession {
 
     private let kmPort: UInt16
     private let peerFilter: UdpPeerFilter
+    private let kmSharedSecret: String
     private let log: (String) -> Void
 
     private let stream = UdpKmStream()
@@ -32,9 +33,10 @@ final class MacReceiverSession {
     var lockOnDisconnect = false
     var onLinkChange: ((Bool) -> Void)?
 
-    init(kmPort: UInt16, allowedPeerHost: String, log: @escaping (String) -> Void) {
+    init(kmPort: UInt16, allowedPeerHost: String, kmSharedSecret: String, log: @escaping (String) -> Void) {
         self.kmPort = kmPort
         self.peerFilter = UdpPeerFilter(expectedHost: allowedPeerHost)
+        self.kmSharedSecret = kmSharedSecret
         self.log = log
     }
 
@@ -46,6 +48,10 @@ final class MacReceiverSession {
         stream.onFrameFrom = { [weak self] frame, endpoint in
             self?.handle(frame, remote: endpoint)
         }
+        stream.onDrop = { [weak self] message in
+            self?.noteDroppedFrame(message)
+        }
+        stream.authenticationSecret = kmSharedSecret
         try stream.bind(localPort: kmPort)
 
         linkMonitor.onEvent = { [weak self] event in
@@ -70,7 +76,8 @@ final class MacReceiverSession {
         }
         linkMonitor.start()
 
-        log("Receiving KM frames on UDP :\(kmPort) from trusted peer \(peerFilter.expectedHost)")
+        let auth = UdpKmAuthenticator(sharedSecret: kmSharedSecret) == nil ? "auth off" : "auth on"
+        log("Receiving KM frames on UDP :\(kmPort) from trusted peer \(peerFilter.expectedHost) (\(auth))")
     }
 
     func stop() {
@@ -122,13 +129,17 @@ final class MacReceiverSession {
     }
 
     private func noteDroppedFrame(from endpoint: NWEndpoint) {
+        noteDroppedFrame("Dropped KM frame from untrusted UDP peer \(endpoint). Expected \(peerFilter.expectedHost).")
+    }
+
+    private func noteDroppedFrame(_ message: String) {
         droppedCount += 1
         let now = Date()
         guard droppedCount <= 3 || now.timeIntervalSince(lastDropLog) > 10 else {
             return
         }
         lastDropLog = now
-        log("Dropped KM frame from untrusted UDP peer \(endpoint). Expected \(peerFilter.expectedHost).")
+        log(message)
     }
 
     private func lockDisplay() {

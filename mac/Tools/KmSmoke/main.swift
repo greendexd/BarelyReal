@@ -41,6 +41,7 @@ private func runUdpLoopback(_ arguments: [String]) throws {
     }
 
     let stream = UdpKmStream()
+    stream.authenticationSecret = optionValue(arguments, "--km-secret")
     let semaphore = DispatchSemaphore(value: 0)
     let expected = KmFrame(seq: 7, timestampUs: nowUs(), type: .heartbeat)
     var received: KmFrame?
@@ -114,6 +115,7 @@ private func runSend(_ arguments: [String]) throws {
     let immediateRemoteMode = arguments.contains("--remote")
     let edgeDirection: EdgeDirection = arguments.contains("--peer-left") || arguments.contains("--windows-left") ? .left : .right
     let peerScreen = parsePeerScreen(arguments) ?? PeerScreen(width: 1_920, height: 1_080)
+    let kmSecret = optionValue(arguments, "--km-secret")
     guard let port = NWEndpoint.Port(rawValue: portValue) else {
         throw SmokeError.invalidPort(portValue)
     }
@@ -124,6 +126,7 @@ private func runSend(_ arguments: [String]) throws {
     }
 
     let stream = UdpKmStream()
+    stream.authenticationSecret = kmSecret
     let tap = EventTap()
     let endpoint = NWEndpoint.hostPort(host: .name(host, nil), port: port)
     let bridge = EdgeBridge(
@@ -150,7 +153,7 @@ private func runSend(_ arguments: [String]) throws {
     }
 
     try tap.start()
-    print("Sending KM frames to \(host):\(portValue). Mode: \(mirrorMode ? "mirror" : immediateRemoteMode ? "remote" : "edge"). Press Ctrl+C to stop.")
+    print("Sending KM frames to \(host):\(portValue). Mode: \(mirrorMode ? "mirror" : immediateRemoteMode ? "remote" : "edge")\(kmSecret == nil ? "" : ", HMAC auth"). Press Ctrl+C to stop.")
     if !mirrorMode && !immediateRemoteMode {
         print(edgeDirection.enterHint)
         print("Peer screen assumed \(peerScreen.width)x\(peerScreen.height). Override with --peer-size WIDTHxHEIGHT if needed.")
@@ -168,6 +171,7 @@ private func runReceive(_ arguments: [String]) throws {
     let portValue = arguments.count >= 2 ? UInt16(arguments[1]) ?? 24_801 : 24_801
     let seconds = arguments.count >= 3 ? Double(arguments[2]) ?? 0 : 0
     let stream = UdpKmStream()
+    stream.authenticationSecret = optionValue(arguments, "--km-secret")
     let injector = EventInjector()
     var receivedCount = 0
 
@@ -186,7 +190,7 @@ private func runReceive(_ arguments: [String]) throws {
     }
 
     try stream.bind(localPort: portValue)
-    print("Receiving KM frames on UDP :\(portValue). Press Ctrl+C to stop.")
+    print("Receiving KM frames on UDP :\(portValue)\(stream.authenticationSecret == nil ? "" : " with HMAC auth required"). Press Ctrl+C to stop.")
 
     runUntilStopped(seconds: seconds) {
         stream.close()
@@ -240,6 +244,15 @@ private func nowUs() -> UInt64 {
     UInt64(Date().timeIntervalSince1970 * 1_000_000)
 }
 
+private func optionValue(_ arguments: [String], _ option: String) -> String? {
+    guard let index = arguments.firstIndex(of: option),
+          arguments.indices.contains(index + 1)
+    else { return nil }
+
+    let value = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+    return value.isEmpty ? nil : value
+}
+
 private func runUntilStopped(seconds: Double, cleanup: @escaping () -> Void) {
     let signalSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
     signal(SIGINT, SIG_IGN)
@@ -264,22 +277,22 @@ private func printUsage() {
 BarelyRealKmSmoke
 
 Usage:
-  BarelyRealKmSmoke udp-loopback [port]
+  BarelyRealKmSmoke udp-loopback [port] [--km-secret <secret>]
       Sends one Heartbeat frame to 127.0.0.1 and verifies it comes back.
 
   BarelyRealKmSmoke capture [seconds]
       Prints captured CGEventTap mouse/keyboard frames. Requires Accessibility permission.
 
-  BarelyRealKmSmoke send <peerHost> [peerPort] [seconds] [--peer-left|--peer-right] [--remote|--mirror]
-      Captures local KM frames and sends them to a peer over raw UDP.
+  BarelyRealKmSmoke send <peerHost> [peerPort] [seconds] [--peer-left|--peer-right] [--remote|--mirror] [--km-secret <secret>]
+      Captures local KM frames and sends them to a peer over UDP.
       Default is edge mode: enter Windows after crossing the configured Mac edge.
       Default peer side is right. Use --peer-left when Windows is left of the Mac.
       Use --peer-size WIDTHxHEIGHT if the Windows display is not 1920x1080.
       Use --remote to immediately suppress local Mac input.
       Use --mirror only for debugging.
 
-  BarelyRealKmSmoke receive [localPort] [seconds]
-      Receives raw UDP KM frames and injects them locally.
+  BarelyRealKmSmoke receive [localPort] [seconds] [--km-secret <secret>]
+      Receives UDP KM frames and injects them locally.
 
   BarelyRealKmSmoke inject-mouse [dx] [dy]
       Injects one relative mouse move. Default: dx=20 dy=0.

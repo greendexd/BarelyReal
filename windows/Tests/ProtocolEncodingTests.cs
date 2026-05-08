@@ -86,6 +86,45 @@ internal static class ProtocolEncodingTests
             Expect.EqualBytes(reEncoded, bytes);
         });
 
+        TestRunner.Run("udpKmAuthEnvelopeKnownByteFixture", () =>
+        {
+            var inner = new byte[]
+            {
+                0x04, 0x03, 0x02, 0x01,
+                0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+                0xFE
+            };
+            var key = UdpKmAuthenticator.DeriveKey(" secret ");
+            var expectedKey = Convert.FromHexString("57CDE31BFA063A01C9C164862DB9F221BFDA3CD22D08643842B1DEABDCDD7AEA");
+            Expect.EqualBytes(key, expectedKey);
+
+            var expectedEnvelope = Convert.FromHexString(
+                "42524B4D010100000D000000040302018877665544332211FE6F78FEFD0F8C2069241D77FABC50E8BFF6CD982EC59E32B90E51FC678A4C03DE");
+            var wrapped = UdpKmAuthenticator.Wrap(inner, key);
+            Expect.EqualBytes(wrapped, expectedEnvelope);
+
+            Expect.True(UdpKmAuthenticator.TryUnwrap(wrapped, key, out var unwrapped, out var failure), failure);
+            Expect.EqualBytes(unwrapped, inner);
+        });
+
+        TestRunner.Run("udpKmAuthEnvelopeRejectsInvalidTag", () =>
+        {
+            var key = UdpKmAuthenticator.DeriveKey("test shared secret");
+            var wrapped = UdpKmAuthenticator.Wrap(new byte[] { 0x01, 0x02, 0x03 }, key);
+            wrapped[^1] ^= 0x80;
+            Expect.True(!UdpKmAuthenticator.TryUnwrap(wrapped, key, out _, out var failure), "tampered envelope must fail");
+            Expect.Equal(failure, "invalid HMAC tag");
+        });
+
+        TestRunner.Run("udpKmAuthEnvelopeRejectsRawWhenRequired", () =>
+        {
+            var key = UdpKmAuthenticator.DeriveKey("test shared secret");
+            var rawFrame = new byte[KmFrameCodec.HeaderSize];
+            rawFrame[12] = (byte)KmType.Heartbeat;
+            Expect.True(!UdpKmAuthenticator.TryUnwrap(rawFrame, key, out _, out var failure), "raw frame must fail");
+            Expect.Equal(failure, "missing BRKM auth envelope");
+        });
+
         TestRunner.Run("kmFrameTruncatedThrows", () =>
         {
             Expect.Throws<BrpCodecException>(() => KmFrameCodec.Decode(new byte[] { 0x01, 0x02, 0x03 }));

@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Binding var clipboardPort: Int
     @Binding var scrollSpeed: Int
     @Binding var lockOnDisconnect: Bool
+    @Binding var kmSharedSecret: String
 
     var body: some View {
         ScrollView {
@@ -57,6 +58,19 @@ struct SettingsView: View {
                 }
 
                 section(title: "Privacy & safety", icon: "lock.shield") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        settingRow("KM shared secret") {
+                            SecureField("Same secret on both computers", text: $kmSharedSecret)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 260)
+                        }
+                        Text("When set on both machines, UDP keyboard/mouse frames are HMAC-authenticated before injection. This dev secret is session-only until PIN pairing lands.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Divider()
+
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
                             Image(systemName: "keyboard")

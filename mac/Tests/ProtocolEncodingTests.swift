@@ -412,5 +412,49 @@ enum ProtocolEncodingTests {
             try expect(filter.allows(remoteHost: "::1"), "localhost should allow IPv6 loopback")
             try expect(!UdpPeerFilter(expectedHost: "").isActive, "empty peer host should disable receiver startup")
         }
+
+        r.run("udpKmAuthenticatorRoundTripKnownFixture") {
+            let frameBytes = Data([
+                0x04, 0x03, 0x02, 0x01,
+                0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+                0xFE,
+            ])
+            guard let authenticator = UdpKmAuthenticator(sharedSecret: "secret") else {
+                throw TestFailure.message("expected authenticator")
+            }
+            let envelope = authenticator.seal(frameBytes)
+            let expected: [UInt8] = [
+                0x42, 0x52, 0x4B, 0x4D, 0x01, 0x01, 0x00, 0x00,
+                0x0D, 0x00, 0x00, 0x00,
+                0x04, 0x03, 0x02, 0x01,
+                0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+                0xFE,
+                0x6F, 0x78, 0xFE, 0xFD, 0x0F, 0x8C, 0x20, 0x69,
+                0x24, 0x1D, 0x77, 0xFA, 0xBC, 0x50, 0xE8, 0xBF,
+                0xF6, 0xCD, 0x98, 0x2E, 0xC5, 0x9E, 0x32, 0xB9,
+                0x0E, 0x51, 0xFC, 0x67, 0x8A, 0x4C, 0x03, 0xDE,
+            ]
+            try expectEqual(Array(envelope), expected)
+            try expectEqual(try authenticator.open(envelope), frameBytes)
+        }
+
+        r.run("udpKmAuthenticatorRejectsWrongSecretAndTamper") {
+            let frameBytes = Data([0x01, 0x02, 0x03])
+            guard let authenticator = UdpKmAuthenticator(sharedSecret: "secret"),
+                  let wrong = UdpKmAuthenticator(sharedSecret: "wrong") else {
+                throw TestFailure.message("expected authenticators")
+            }
+            let envelope = authenticator.seal(frameBytes)
+
+            try expectThrows(UdpKmAuthenticationError.invalidTag) {
+                _ = try wrong.open(envelope)
+            }
+
+            var tampered = envelope
+            tampered[UdpKmAuthenticator.headerSize] ^= 0x01
+            try expectThrows(UdpKmAuthenticationError.invalidTag) {
+                _ = try authenticator.open(tampered)
+            }
+        }
     }
 }

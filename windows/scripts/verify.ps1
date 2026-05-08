@@ -52,8 +52,12 @@ if (-not $NoRun) {
 }
 
 if (-not $NoSmoke) {
-    Step "UDP smoke" {
+    Step "UDP smoke raw" {
         dotnet run --project (Join-Path $WindowsDir "Tools/KmSmoke/KmSmoke.csproj") --no-build -- udp-loopback
+    }
+
+    Step "UDP smoke authenticated" {
+        dotnet run --project (Join-Path $WindowsDir "Tools/KmSmoke/KmSmoke.csproj") --no-build -- udp-loopback 24901 --km-secret verify-secret
     }
 }
 

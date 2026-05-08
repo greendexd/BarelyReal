@@ -124,7 +124,26 @@ struct KmFrame {
 
 KM frames are encrypted with ChaCha20-Poly1305 using a key derived from the TLS exporter (`HKDF "barelyreal km"`); nonce = `seq || zero-padded`. Receiver drops any frame whose `seq` is older than `max_seen − 1024` (replay protection) or fails AEAD.
 
-Implementation note: the current Week 2 scaffold sends raw `KmFrame` bytes while `TlsSession` is still a stub. AEAD is the next network-security layer once TLS exporter key material exists.
+Implementation note: the current dev build can still send raw `KmFrame` bytes
+for smoke tests. When a KM shared secret is configured, each UDP datagram uses a
+temporary authenticated envelope until TLS exporter key material exists:
+
+```
+struct DevKmEnvelope {
+    u8 magic[4] = "BRKM";
+    u8 version = 1;
+    u8 algorithm = 1;    // HMAC-SHA256
+    u16 flags = 0;
+    u32 inner_len;
+    u8 inner[inner_len]; // raw KmFrame bytes
+    u8 tag[32];          // HMAC(header || inner)
+}
+```
+
+The HMAC key is `SHA256("BarelyReal UDP KM v1\\0" || trim(shared_secret))`.
+This is a dev-mode authentication guard only; it does not provide
+confidentiality or replay protection and must be replaced by the AEAD layer for
+release builds.
 
 ### `KmType`
 

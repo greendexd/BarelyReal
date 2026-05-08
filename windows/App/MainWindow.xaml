@@ -618,6 +618,13 @@
                                           Unchecked="LockOnDisconnectCheck_Changed" />
                                 <TextBlock Text="Triggers LockWorkStation() if no KM frames arrive for five seconds while in receive mode."
                                            Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="22,4,0,0" TextWrapping="Wrap" />
+                                <TextBlock Text="UDP KM shared secret" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,16,0,0" />
+                                <PasswordBox x:Name="KmSharedSecretBox"
+                                             Margin="0,4,0,0"
+                                             PasswordChanged="CommandInput_Changed"
+                                             FontFamily="Cascadia Mono, Consolas" />
+                                <TextBlock Text="Leave blank for raw dev-mode KM frames. When set, receive mode requires BRKM HMAC-SHA256 envelopes and send mode wraps outgoing frames."
+                                           Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 

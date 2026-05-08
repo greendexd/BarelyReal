@@ -29,6 +29,7 @@ internal sealed class DevReceiverService : IDisposable
     public ushort ClipboardPort { get; private set; }
     public string ClipboardPeer { get; private set; } = string.Empty;
     public string ExpectedPeerHost { get; private set; } = string.Empty;
+    public bool KmAuthRequired { get; private set; }
     public int FramesReceived { get; private set; }
     public int ClipboardEvents { get; private set; }
 
@@ -36,7 +37,7 @@ internal sealed class DevReceiverService : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool LockWorkStation();
 
-    public void Start(ushort kmPort, string expectedPeerHost, ushort clipboardPort)
+    public void Start(ushort kmPort, string expectedPeerHost, ushort clipboardPort, string? kmSharedSecret)
     {
         lock (_gate)
         {
@@ -50,11 +51,12 @@ internal sealed class DevReceiverService : IDisposable
             ClipboardPort = clipboardPort;
             ExpectedPeerHost = expectedPeerHost.Trim();
             ClipboardPeer = ExpectedPeerHost;
+            KmAuthRequired = !string.IsNullOrWhiteSpace(kmSharedSecret);
             FramesReceived = 0;
             ClipboardEvents = 0;
             _cts = new CancellationTokenSource();
             _injector = new InputInjector { Log = Log };
-            _stream = new UdpKmStream();
+            _stream = new UdpKmStream(kmSharedSecret);
             _stream.LogLine += Log;
             _stream.OnFrame += HandleFrame;
 
@@ -68,7 +70,7 @@ internal sealed class DevReceiverService : IDisposable
 
                 StartClipboardIfNeeded(_cts.Token);
                 IsRunning = true;
-                Log($"Receiving KM frames on UDP :{kmPort} from {ExpectedPeerHost} only.");
+                Log($"Receiving KM frames on UDP :{kmPort} from {ExpectedPeerHost} only{(KmAuthRequired ? " with HMAC authentication" : "")}.");
                 if (!string.IsNullOrWhiteSpace(ClipboardPeer))
                     Log($"Clipboard sync listening on TCP :{clipboardPort}, peer {ClipboardPeer}:{clipboardPort}.");
                 StatsChanged?.Invoke();

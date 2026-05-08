@@ -177,7 +177,8 @@ final class BarelyRealStore: ObservableObject {
         receiverSession?.stop()
         let session = MacReceiverSession(
             kmPort: UInt16(settings.kmPort),
-            allowedPeerHost: settings.peerHost
+            allowedPeerHost: settings.peerHost,
+            kmSharedSecret: settings.kmSharedSecret
         ) { [weak self] message in
             Task { @MainActor in self?.appendLog(message) }
         }
@@ -225,7 +226,8 @@ final class BarelyRealStore: ObservableObject {
                 remotePeerId: remotePeerId,
                 layoutProvider: { [weak self] in self?.virtualLayout ?? Layout(screens: []) },
                 remoteDisplaysProvider: { [weak self] in self?.remoteDisplays ?? [] },
-                scrollSpeed: settings.scrollSpeed
+                scrollSpeed: settings.scrollSpeed,
+                kmSharedSecret: settings.kmSharedSecret
             ) { [weak self] message in
                 Task { @MainActor in self?.appendLog(message) }
             }
@@ -486,5 +488,6 @@ struct ConnectionSettings {
     var kmPort: Int
     var clipboardPort: Int
     var scrollSpeed: Int
+    var kmSharedSecret: String
     var mode: MacKmMode = .sendToWindows
 }

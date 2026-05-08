@@ -33,7 +33,7 @@ Implemented so far:
 - BRP frame codecs on macOS + Windows with shared byte fixtures.
 - KM payload helpers on macOS + Windows.
 - Launchable macOS controller app with KM edge mode, multi-monitor layout editor, scroll speed, permission checks, and clipboard test buttons.
-- Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition and trusted-peer source filtering.
+- Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition, trusted-peer source filtering, and optional HMAC authentication.
 - Text, PNG, and file clipboard sync over TCP port `24802`.
 - Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
@@ -47,8 +47,10 @@ Implemented so far:
 
 ## Run the Current Dev Bridge
 
-This is the current working path. KM still uses raw UDP dev mode with a trusted peer IP filter,
-and control/layout sync uses clear TCP dev mode. TLS/PIN security is the next hardening step.
+This is the current working path. KM can still use raw UDP dev mode, but the apps now support
+a matching "KM shared secret" that wraps KM datagrams in a `BRKM` HMAC-SHA256 envelope before
+input is injected. Control/layout sync still uses clear TCP dev mode. TLS/PIN security is the
+next hardening step.
 
 1. On Windows, unzip/copy the project and run:
 
@@ -70,7 +72,10 @@ and control/layout sync uses clear TCP dev mode. TLS/PIN security is the next ha
 4. Enter the Windows Wi-Fi IP in the Mac app. Both apps exchange all local screens on TCP `24800`.
    The Devices page shows every monitor in one virtual layout.
 
-5. Drag the peer screen group in Devices to the real physical position: left, right, top,
+5. Optional but recommended: set the same KM shared secret in Settings on both machines before
+   starting KM. This is a temporary dev-mode HMAC key until PIN pairing lands.
+
+6. Drag the peer screen group in Devices to the real physical position: left, right, top,
    bottom, or a corner/offset. Moving the cursor across a matching physical edge transfers
    control to the other machine.
 

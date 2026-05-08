@@ -1,11 +1,13 @@
 using BarelyReal.Core.Protocol;
+using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace BarelyReal.Core.Network;
 
 /// UDP socket carrying encoded KmFrame events.
-/// TODO: wrap frames in AEAD once TlsSession exposes exporter-derived key material.
 public sealed class UdpKmStream : IDisposable
 {
     public event Action<KmFrame>? OnFrame;
@@ -14,8 +16,24 @@ public sealed class UdpKmStream : IDisposable
     private UdpClient? _client;
     private CancellationTokenSource? _cts;
     private UdpKmSourceFilter _sourceFilter = UdpKmSourceFilter.Disabled;
+    private byte[]? _authKey;
     private ulong _droppedFrames;
+    private ulong _authFailures;
     private DateTime _lastDropLogUtc = DateTime.MinValue;
+    private DateTime _lastAuthFailureLogUtc = DateTime.MinValue;
+
+    public UdpKmStream(string? sharedSecret = null)
+    {
+        SetSharedSecret(sharedSecret);
+    }
+
+    public bool IsAuthenticationEnabled => _authKey is not null;
+
+    public void SetSharedSecret(string? sharedSecret)
+    {
+        var trimmed = sharedSecret?.Trim();
+        _authKey = string.IsNullOrWhiteSpace(trimmed) ? null : UdpKmAuthenticator.DeriveKey(trimmed);
+    }
 
     public void Bind(ushort localPort, string? expectedPeerHost = null)
     {
@@ -23,11 +41,15 @@ public sealed class UdpKmStream : IDisposable
 
         _sourceFilter = UdpKmSourceFilter.FromHost(expectedPeerHost);
         _droppedFrames = 0;
+        _authFailures = 0;
         _lastDropLogUtc = DateTime.MinValue;
+        _lastAuthFailureLogUtc = DateTime.MinValue;
         _client = new UdpClient(new IPEndPoint(IPAddress.Any, localPort));
         _cts = new CancellationTokenSource();
         if (_sourceFilter.Enabled)
             LogLine?.Invoke($"UDP source filter enabled for {_sourceFilter.Description}");
+        if (IsAuthenticationEnabled)
+            LogLine?.Invoke("UDP KM authentication required (HMAC-SHA256).");
         _ = ReceiveLoopAsync(_client, _cts.Token);
     }
 
@@ -35,6 +57,8 @@ public sealed class UdpKmStream : IDisposable
     {
         var client = _client ??= new UdpClient();
         var payload = KmFrameCodec.Encode(frame);
+        if (_authKey is { } authKey)
+            payload = UdpKmAuthenticator.Wrap(payload, authKey);
         client.Send(payload, payload.Length, peerHost, peerPort);
     }
 
@@ -66,11 +90,15 @@ public sealed class UdpKmStream : IDisposable
                     continue;
                 }
 
+                var payload = AuthenticateDatagram(result.Buffer, result.RemoteEndPoint);
+                if (payload is null)
+                    continue;
+
                 LogLine?.Invoke(
-                    $"UDP frame received raw bytes len={result.Buffer.Length} from={result.RemoteEndPoint} hex={PreviewHex(result.Buffer)}");
+                    $"UDP frame received bytes len={payload.Length} from={result.RemoteEndPoint} hex={PreviewHex(payload)}");
                 try
                 {
-                    OnFrame?.Invoke(KmFrameCodec.Decode(result.Buffer));
+                    OnFrame?.Invoke(KmFrameCodec.Decode(payload));
                 }
                 catch (BrpCodecException ex)
                 {
@@ -101,6 +129,40 @@ public sealed class UdpKmStream : IDisposable
         }
     }
 
+    private byte[]? AuthenticateDatagram(byte[] datagram, IPEndPoint remoteEndPoint)
+    {
+        if (_authKey is not { } authKey)
+        {
+            if (UdpKmAuthenticator.HasMagic(datagram))
+            {
+                LogAuthFailure(remoteEndPoint, "authenticated envelope received but no shared secret is configured");
+                return null;
+            }
+
+            return datagram;
+        }
+
+        if (!UdpKmAuthenticator.TryUnwrap(datagram, authKey, out var payload, out var failure))
+        {
+            LogAuthFailure(remoteEndPoint, failure);
+            return null;
+        }
+
+        return payload;
+    }
+
+    private void LogAuthFailure(IPEndPoint remoteEndPoint, string reason)
+    {
+        _authFailures++;
+        var now = DateTime.UtcNow;
+        if (_authFailures <= 3 || _authFailures % 100 == 0 || now - _lastAuthFailureLogUtc >= TimeSpan.FromSeconds(30))
+        {
+            _lastAuthFailureLogUtc = now;
+            LogLine?.Invoke(
+                $"UDP KM auth failed from {remoteEndPoint}: {reason}; dropped={_authFailures}");
+        }
+    }
+
     private static string PreviewHex(byte[] bytes)
     {
         const int maxPreviewBytes = 64;
@@ -108,6 +170,123 @@ public sealed class UdpKmStream : IDisposable
         var hex = Convert.ToHexString(bytes.AsSpan(0, previewLength));
         return bytes.Length > maxPreviewBytes ? $"{hex}..." : hex;
     }
+}
+
+public static class UdpKmAuthenticator
+{
+    public const int HeaderSize = 12;
+    public const int TagSize = 32;
+    public const byte Version = 1;
+    public const byte AlgorithmHmacSha256 = 1;
+    public const uint Magic = 0x4D4B5242; // ASCII "BRKM" in little-endian order.
+    private static readonly byte[] KeyLabel = Encoding.UTF8.GetBytes("BarelyReal UDP KM v1\0");
+
+    public static byte[] DeriveKey(string sharedSecret)
+    {
+        var secretBytes = Encoding.UTF8.GetBytes(sharedSecret.Trim());
+        var input = new byte[KeyLabel.Length + secretBytes.Length];
+        KeyLabel.CopyTo(input, 0);
+        secretBytes.CopyTo(input, KeyLabel.Length);
+        return SHA256.HashData(input);
+    }
+
+    public static bool HasMagic(ReadOnlySpan<byte> datagram) =>
+        datagram.Length >= 4 && BinaryPrimitives.ReadUInt32LittleEndian(datagram[..4]) == Magic;
+
+    public static byte[] Wrap(ReadOnlySpan<byte> payload, ReadOnlySpan<byte> key)
+    {
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(payload.Length, int.MaxValue - HeaderSize - TagSize);
+
+        var datagram = new byte[HeaderSize + payload.Length + TagSize];
+        var span = datagram.AsSpan();
+        BinaryPrimitives.WriteUInt32LittleEndian(span[..4], Magic);
+        span[4] = Version;
+        span[5] = AlgorithmHmacSha256;
+        span[6] = 0; // flags
+        span[7] = 0; // reserved
+        BinaryPrimitives.WriteUInt32LittleEndian(span.Slice(8, 4), (uint)payload.Length);
+        payload.CopyTo(span.Slice(HeaderSize, payload.Length));
+
+        var tag = HMACSHA256.HashData(key, span[..^TagSize]);
+        tag.CopyTo(span[^TagSize..]);
+        return datagram;
+    }
+
+    public static bool TryUnwrap(
+        ReadOnlySpan<byte> datagram,
+        ReadOnlySpan<byte> key,
+        out byte[] payload,
+        out string failure)
+    {
+        payload = Array.Empty<byte>();
+
+        if (datagram.Length < HeaderSize + TagSize)
+        {
+            failure = "truncated envelope";
+            return false;
+        }
+
+        if (!HasMagic(datagram))
+        {
+            failure = "missing BRKM auth envelope";
+            return false;
+        }
+
+        if (datagram[4] != Version)
+        {
+            failure = $"unsupported envelope version {datagram[4]}";
+            return false;
+        }
+
+        if (datagram[5] != AlgorithmHmacSha256)
+        {
+            failure = $"unsupported auth algorithm {datagram[5]}";
+            return false;
+        }
+
+        if (datagram[6] != 0 || datagram[7] != 0)
+        {
+            failure = "unsupported envelope flags";
+            return false;
+        }
+
+        var payloadLength = BinaryPrimitives.ReadUInt32LittleEndian(datagram.Slice(8, 4));
+        if (payloadLength > int.MaxValue)
+        {
+            failure = "payload length overflow";
+            return false;
+        }
+
+        var expectedLength = HeaderSize + (int)payloadLength + TagSize;
+        if (datagram.Length != expectedLength)
+        {
+            failure = "payload length mismatch";
+            return false;
+        }
+
+        var expectedTag = HMACSHA256.HashData(key, datagram[..^TagSize]);
+        if (!CryptographicOperations.FixedTimeEquals(expectedTag, datagram[^TagSize..]))
+        {
+            failure = "invalid HMAC tag";
+            return false;
+        }
+
+        payload = datagram.Slice(HeaderSize, (int)payloadLength).ToArray();
+        failure = string.Empty;
+        return true;
+    }
+}
+
+public enum UdpKmAuthenticationError
+{
+    TruncatedEnvelope,
+    MissingEnvelope,
+    UnsupportedVersion,
+    UnsupportedAlgorithm,
+    UnsupportedFlags,
+    PayloadLengthOverflow,
+    PayloadLengthMismatch,
+    InvalidHmacTag
 }
 
 public sealed class UdpKmSourceFilter

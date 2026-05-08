@@ -39,7 +39,9 @@ The repository is in early development. Current strengths:
   clipboard sync, smoke tools, firewall helper, and verification script.
 - Dev control/layout sync works over clear TCP `24800` for `Hello`,
   `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
-- Dev KM works over UDP `24801` with trusted peer IP source filtering.
+- Dev KM works over UDP `24801` with trusted peer IP source filtering and
+  optional `BRKM` HMAC-SHA256 datagram authentication via a session-only shared
+  secret.
 - Dev clipboard sync uses TCP `24802` for text, PNG images, and file bundles.
 - Pairing, identity, TLS, mDNS, file transfer, and release packaging have
   scaffolding or docs, but not enough enforced behavior for public release.
@@ -47,7 +49,9 @@ The repository is in early development. Current strengths:
 Non-negotiable gaps before release:
 
 - TLS 1.3 control channel must replace clear TCP for release builds.
-- UDP KM must still be encrypted and replay-protected with exporter-derived AEAD; source filtering is only a dev-mode guard.
+- UDP KM must still be encrypted and replay-protected with exporter-derived
+  AEAD; source filtering and the temporary HMAC shared secret are dev-mode
+  guards, not final pairing.
 - PIN pairing, peer pinning, lockout, identity reset, and MITM handling must be
   connected to both UIs and persisted correctly.
 - macOS Accessibility and Input Monitoring flows must be reliable for the

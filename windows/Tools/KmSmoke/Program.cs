@@ -39,8 +39,10 @@ catch (Exception ex)
 
 static async Task<int> UdpLoopback(string[] args)
 {
-    var port = args.Length >= 2 ? ushort.Parse(args[1]) : (ushort)24801;
-    using var stream = new UdpKmStream();
+    var positionals = PositionalArguments(args);
+    var port = positionals.Count >= 1 ? ushort.Parse(positionals[0]) : (ushort)24801;
+    var kmSecret = OptionValue(args, "--km-secret");
+    using var stream = new UdpKmStream(kmSecret);
     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
     var received = new TaskCompletionSource<KmFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -89,16 +91,18 @@ static int Capture(string[] args)
 
 static int Send(string[] args)
 {
-    if (args.Length < 2)
+    var positionals = PositionalArguments(args);
+    if (positionals.Count < 1)
     {
         Console.Error.WriteLine("send requires peer host: send <peerHost> [peerPort] [seconds]");
         return 2;
     }
 
-    var peerHost = args[1];
-    var peerPort = args.Length >= 3 ? ushort.Parse(args[2]) : (ushort)24801;
-    var seconds = args.Length >= 4 ? int.Parse(args[3]) : 0;
-    using var stream = new UdpKmStream();
+    var peerHost = positionals[0];
+    var peerPort = positionals.Count >= 2 ? ushort.Parse(positionals[1]) : (ushort)24801;
+    var seconds = positionals.Count >= 3 ? int.Parse(positionals[2]) : 0;
+    var kmSecret = OptionValue(args, "--km-secret");
+    using var stream = new UdpKmStream(kmSecret);
     using var hooks = new LowLevelHooks();
     using var done = new ManualResetEventSlim(false);
     var sent = 0;
@@ -118,7 +122,7 @@ static int Send(string[] args)
     };
 
     hooks.Start();
-    Console.WriteLine($"Sending KM frames to {peerHost}:{peerPort}. Press Ctrl+C to stop.");
+    Console.WriteLine($"Sending KM frames to {peerHost}:{peerPort}{(string.IsNullOrWhiteSpace(kmSecret) ? "" : " with HMAC authentication")}. Press Ctrl+C to stop.");
 
     if (seconds > 0)
         done.Wait(TimeSpan.FromSeconds(seconds));
@@ -132,11 +136,13 @@ static int Send(string[] args)
 
 static int Receive(string[] args)
 {
-    var localPort = PositionalUInt16(args, 1, 24801);
-    var seconds = PositionalInt(args, 2, 0);
+    var positionals = PositionalArguments(args);
+    var localPort = positionals.Count >= 1 ? ushort.Parse(positionals[0]) : (ushort)24801;
+    var seconds = positionals.Count >= 2 ? int.Parse(positionals[1]) : 0;
     var clipboardPeer = OptionValue(args, "--clipboard-peer");
     var clipboardPort = OptionUInt16(args, "--clipboard-port", 24802);
-    using var stream = new UdpKmStream();
+    var kmSecret = OptionValue(args, "--km-secret");
+    using var stream = new UdpKmStream(kmSecret);
     using var done = new ManualResetEventSlim(false);
     using var cts = new CancellationTokenSource();
     var injector = new InputInjector();
@@ -167,7 +173,7 @@ static int Receive(string[] args)
     };
 
     stream.Bind(localPort);
-    Console.WriteLine($"Receiving KM frames on UDP :{localPort}. Press Ctrl+C to stop.");
+    Console.WriteLine($"Receiving KM frames on UDP :{localPort}{(string.IsNullOrWhiteSpace(kmSecret) ? "" : " with HMAC authentication required")}. Press Ctrl+C to stop.");
 
     if (!string.IsNullOrWhiteSpace(clipboardPeer))
     {
@@ -231,16 +237,6 @@ static string Describe(KmFrame frame) =>
 static ulong NowUs() =>
     (ulong)((DateTimeOffset.UtcNow.Ticks - DateTimeOffset.UnixEpoch.Ticks) / 10);
 
-static ushort PositionalUInt16(string[] args, int index, ushort fallback) =>
-    args.Length > index && !args[index].StartsWith("--", StringComparison.Ordinal)
-        ? ushort.Parse(args[index])
-        : fallback;
-
-static int PositionalInt(string[] args, int index, int fallback) =>
-    args.Length > index && !args[index].StartsWith("--", StringComparison.Ordinal)
-        ? int.Parse(args[index])
-        : fallback;
-
 static string? OptionValue(string[] args, string name)
 {
     var index = Array.IndexOf(args, name);
@@ -253,22 +249,40 @@ static ushort OptionUInt16(string[] args, string name, ushort fallback)
     return string.IsNullOrWhiteSpace(value) ? fallback : ushort.Parse(value);
 }
 
+static IReadOnlyList<string> PositionalArguments(string[] args)
+{
+    var values = new List<string>();
+    for (var i = 1; i < args.Length; i++)
+    {
+        if (args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+                i++;
+            continue;
+        }
+
+        values.Add(args[i]);
+    }
+
+    return values;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("""
 BarelyReal.KmSmoke
 
 Usage:
-  KmSmoke udp-loopback [port]
+  KmSmoke udp-loopback [port] [--km-secret <secret>]
       Sends one Heartbeat frame to 127.0.0.1 and verifies it comes back.
 
   KmSmoke capture [seconds]
       Prints captured low-level mouse/keyboard frames. Press Ctrl+C to stop.
 
-  KmSmoke send <peerHost> [peerPort] [seconds]
+  KmSmoke send <peerHost> [peerPort] [seconds] [--km-secret <secret>]
       Captures local KM frames and sends them to a peer over raw UDP.
 
-  KmSmoke receive [localPort] [seconds] [--clipboard-peer <mac-ip>] [--clipboard-port 24802]
+  KmSmoke receive [localPort] [seconds] [--km-secret <secret>] [--clipboard-peer <mac-ip>] [--clipboard-port 24802]
       Receives raw UDP KM frames and injects them locally.
       With --clipboard-peer, also starts bidirectional text and PNG clipboard sync.
 

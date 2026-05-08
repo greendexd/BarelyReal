@@ -44,7 +44,6 @@ public partial class MainWindow : Window
         ClipboardPortBox.TextChanged += CommandInput_Changed;
         ClipboardPeerBox.TextChanged += CommandInput_Changed;
         ControlPortBox.TextChanged += CommandInput_Changed;
-
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -214,7 +213,7 @@ public partial class MainWindow : Window
         try
         {
             StartControl(host);
-            _sender.Start(host, port, LocalPeerId, RemotePeerId, () => _virtualLayout, () => _remoteDisplays);
+            _sender.Start(host, port, LocalPeerId, RemotePeerId, () => _virtualLayout, () => _remoteDisplays, KmSharedSecret());
         }
         catch (Exception ex)
         {
@@ -293,7 +292,7 @@ public partial class MainWindow : Window
         var peerHost = ClipboardPeerBox.Text.Trim();
         try
         {
-            _receiver.Start(kmPort, peerHost, clipboardPort);
+            _receiver.Start(kmPort, peerHost, clipboardPort, KmSharedSecret());
             StartControl(peerHost);
         }
         catch (Exception ex)
@@ -493,6 +492,7 @@ public partial class MainWindow : Window
         ClipboardPeerBox.IsEnabled = !running;
         SendMacHostBox.IsEnabled = !running;
         SendMacKmPortBox.IsEnabled = !running;
+        KmSharedSecretBox.IsEnabled = !running;
 
         FooterText.Text = running
             ? IsSendMode
@@ -576,8 +576,13 @@ public partial class MainWindow : Window
         var kmPort = string.IsNullOrWhiteSpace(KmPortBox.Text) ? "24801" : KmPortBox.Text.Trim();
         var width = string.IsNullOrWhiteSpace(WidthBox?.Text) ? "1920" : WidthBox.Text.Trim();
         var height = string.IsNullOrWhiteSpace(HeightBox?.Text) ? "1080" : HeightBox.Text.Trim();
-
         CommandBox.Text = $"cd mac && swift run BarelyRealKmSmoke send {ip} {kmPort} 0 --peer-{side} --peer-size {width}x{height}";
+    }
+
+    private string? KmSharedSecret()
+    {
+        var secret = KmSharedSecretBox?.Password.Trim();
+        return string.IsNullOrWhiteSpace(secret) ? null : secret;
     }
 
     private void RefreshAddresses()

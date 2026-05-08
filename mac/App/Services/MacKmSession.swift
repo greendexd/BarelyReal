@@ -13,6 +13,7 @@ final class MacKmSession {
     private let layoutProvider: () -> Layout
     private let remoteDisplaysProvider: () -> [DisplayInfo]
     private let scrollSpeed: Int
+    private let kmSharedSecret: String
     private let log: (String) -> Void
 
     private let stream = UdpKmStream()
@@ -32,6 +33,7 @@ final class MacKmSession {
         layoutProvider: @escaping () -> Layout,
         remoteDisplaysProvider: @escaping () -> [DisplayInfo],
         scrollSpeed: Int,
+        kmSharedSecret: String,
         log: @escaping (String) -> Void
     ) {
         self.peerHost = peerHost
@@ -41,6 +43,7 @@ final class MacKmSession {
         self.layoutProvider = layoutProvider
         self.remoteDisplaysProvider = remoteDisplaysProvider
         self.scrollSpeed = scrollSpeed
+        self.kmSharedSecret = kmSharedSecret
         self.log = log
     }
 
@@ -50,6 +53,13 @@ final class MacKmSession {
         }
 
         let endpoint = NWEndpoint.hostPort(host: .name(peerHost, nil), port: port)
+        stream.authenticationSecret = kmSharedSecret
+        if UdpKmAuthenticator(sharedSecret: kmSharedSecret) != nil {
+            log("KM UDP authentication enabled.")
+        } else {
+            log("KM UDP authentication disabled; set a shared secret in Settings.")
+        }
+
         let bridge = EdgeBridge(
             localPeerId: localPeerId,
             remotePeerId: remotePeerId,

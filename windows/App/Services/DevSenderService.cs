@@ -24,6 +24,7 @@ internal sealed class DevSenderService : IDisposable
     public bool IsRunning { get; private set; }
     public string PeerHost { get; private set; } = string.Empty;
     public ushort PeerPort { get; private set; }
+    public bool KmAuthEnabled { get; private set; }
     public int FramesSent { get; private set; }
 
     public void Start(
@@ -32,7 +33,8 @@ internal sealed class DevSenderService : IDisposable
         string localPeerId,
         string remotePeerId,
         Func<Layout> layoutProvider,
-        Func<IReadOnlyList<DisplayInfo>> remoteDisplaysProvider)
+        Func<IReadOnlyList<DisplayInfo>> remoteDisplaysProvider,
+        string? kmSharedSecret)
     {
         lock (_gate)
         {
@@ -40,11 +42,12 @@ internal sealed class DevSenderService : IDisposable
 
             PeerHost = peerHost.Trim();
             PeerPort = peerPort;
+            KmAuthEnabled = !string.IsNullOrWhiteSpace(kmSharedSecret);
             FramesSent = 0;
             _heartbeatSeq = 1_000_000_000;
             _lastFrameSentAt = DateTime.MinValue;
 
-            _stream = new UdpKmStream();
+            _stream = new UdpKmStream(kmSharedSecret);
             _bridge = new WindowsEdgeBridge(localPeerId, remotePeerId, layoutProvider, remoteDisplaysProvider, _stream, PeerHost, PeerPort)
             {
                 Log = Log
@@ -66,7 +69,7 @@ internal sealed class DevSenderService : IDisposable
                     Log("Force-switch hotkey could not be registered (already in use?).");
 
                 IsRunning = true;
-                Log($"Sending KM frames to {PeerHost}:{PeerPort} using synced layout.");
+                Log($"Sending KM frames to {PeerHost}:{PeerPort} using synced layout{(KmAuthEnabled ? " with HMAC authentication" : "")}.");
                 StatsChanged?.Invoke();
             }
             catch

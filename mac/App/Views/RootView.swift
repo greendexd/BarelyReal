@@ -40,6 +40,7 @@ struct RootView: View {
     @AppStorage("connection.scrollSpeed") private var scrollSpeed = 7
     @AppStorage("connection.mode") private var modeRaw = MacKmMode.sendToWindows.rawValue
     @AppStorage("connection.lockOnDisconnect") private var lockOnDisconnect = false
+    @State private var kmSharedSecret = ""
     @AppStorage("connection.peerMac") private var peerMac = ""
     @AppStorage("connection.peerBroadcast") private var peerBroadcast = "192.168.0.255"
 
@@ -117,7 +118,8 @@ struct RootView: View {
                 kmPort: $kmPort,
                 clipboardPort: $clipboardPort,
                 scrollSpeed: $scrollSpeed,
-                lockOnDisconnect: $lockOnDisconnect
+                lockOnDisconnect: $lockOnDisconnect,
+                kmSharedSecret: $kmSharedSecret
             )
         }
     }
@@ -164,6 +166,7 @@ struct RootView: View {
             kmPort: kmPort,
             clipboardPort: clipboardPort,
             scrollSpeed: min(max(scrollSpeed, 1), 20),
+            kmSharedSecret: kmSharedSecret.trimmingCharacters(in: .whitespacesAndNewlines),
             mode: MacKmMode(rawValue: modeRaw) ?? .sendToWindows
         )
     }
