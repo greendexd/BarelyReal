@@ -175,7 +175,10 @@ final class BarelyRealStore: ObservableObject {
 
     private func startReceiver(settings: ConnectionSettings) {
         receiverSession?.stop()
-        let session = MacReceiverSession(kmPort: UInt16(settings.kmPort)) { [weak self] message in
+        let session = MacReceiverSession(
+            kmPort: UInt16(settings.kmPort),
+            allowedPeerHost: settings.peerHost
+        ) { [weak self] message in
             Task { @MainActor in self?.appendLog(message) }
         }
         session.lockOnDisconnect = lockOnDisconnect
@@ -186,7 +189,7 @@ final class BarelyRealStore: ObservableObject {
             try session.start()
             receiverSession = session
             kmRunning = true
-            appendLog("Receiver started on UDP :\(settings.kmPort). Lock-on-disconnect: \(lockOnDisconnect ? "on" : "off")")
+            appendLog("Receiver started on UDP :\(settings.kmPort), trusted peer \(settings.peerHost). Lock-on-disconnect: \(lockOnDisconnect ? "on" : "off")")
         } catch {
             kmRunning = false
             lastError = "Receiver start failed: \(error)"

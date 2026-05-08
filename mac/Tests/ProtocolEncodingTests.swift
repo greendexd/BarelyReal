@@ -397,5 +397,20 @@ enum ProtocolEncodingTests {
             try expect(!layout.screens.isEmpty, "expected at least one local screen")
             try expect(layout.screens.allSatisfy { $0.peerId == "test-mac" }, "wrong peer id in local layout")
         }
+
+        r.run("udpPeerFilterAllowsOnlyExpectedHost") {
+            let filter = UdpPeerFilter(expectedHost: " 192.168.0.100 ")
+            try expect(filter.isActive, "filter should be active with an expected host")
+            try expect(filter.allows(remoteHost: "192.168.0.100"), "exact peer IP should pass")
+            try expect(filter.allows(remoteHost: "::ffff:192.168.0.100"), "IPv4-mapped peer IP should pass")
+            try expect(!filter.allows(remoteHost: "192.168.0.101"), "different LAN peer should be rejected")
+        }
+
+        r.run("udpPeerFilterAllowsLoopbackAliases") {
+            let filter = UdpPeerFilter(expectedHost: "localhost")
+            try expect(filter.allows(remoteHost: "127.0.0.1"), "localhost should allow IPv4 loopback")
+            try expect(filter.allows(remoteHost: "::1"), "localhost should allow IPv6 loopback")
+            try expect(!UdpPeerFilter(expectedHost: "").isActive, "empty peer host should disable receiver startup")
+        }
     }
 }

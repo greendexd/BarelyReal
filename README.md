@@ -33,7 +33,7 @@ Implemented so far:
 - BRP frame codecs on macOS + Windows with shared byte fixtures.
 - KM payload helpers on macOS + Windows.
 - Launchable macOS controller app with KM edge mode, multi-monitor layout editor, scroll speed, permission checks, and clipboard test buttons.
-- Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition.
+- Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition and trusted-peer source filtering.
 - Text, PNG, and file clipboard sync over TCP port `24802`.
 - Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
@@ -47,8 +47,8 @@ Implemented so far:
 
 ## Run the Current Dev Bridge
 
-This is the current working path. KM still uses raw UDP dev mode, and control/layout sync uses
-clear TCP dev mode. TLS/PIN security is the next hardening step.
+This is the current working path. KM still uses raw UDP dev mode with a trusted peer IP filter,
+and control/layout sync uses clear TCP dev mode. TLS/PIN security is the next hardening step.
 
 1. On Windows, unzip/copy the project and run:
 

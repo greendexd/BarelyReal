@@ -28,6 +28,7 @@ internal sealed class DevReceiverService : IDisposable
     public ushort KmPort { get; private set; }
     public ushort ClipboardPort { get; private set; }
     public string ClipboardPeer { get; private set; } = string.Empty;
+    public string ExpectedPeerHost { get; private set; } = string.Empty;
     public int FramesReceived { get; private set; }
     public int ClipboardEvents { get; private set; }
 
@@ -35,16 +36,20 @@ internal sealed class DevReceiverService : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool LockWorkStation();
 
-    public void Start(ushort kmPort, string clipboardPeer, ushort clipboardPort)
+    public void Start(ushort kmPort, string expectedPeerHost, ushort clipboardPort)
     {
         lock (_gate)
         {
             if (IsRunning)
                 return;
 
+            if (string.IsNullOrWhiteSpace(expectedPeerHost))
+                throw new InvalidOperationException("Mac IP is required before starting Windows → Mac input.");
+
             KmPort = kmPort;
             ClipboardPort = clipboardPort;
-            ClipboardPeer = clipboardPeer.Trim();
+            ExpectedPeerHost = expectedPeerHost.Trim();
+            ClipboardPeer = ExpectedPeerHost;
             FramesReceived = 0;
             ClipboardEvents = 0;
             _cts = new CancellationTokenSource();
@@ -55,7 +60,7 @@ internal sealed class DevReceiverService : IDisposable
 
             try
             {
-                _stream.Bind(kmPort);
+                _stream.Bind(kmPort, ExpectedPeerHost);
 
                 _linkMonitor = new KmLinkMonitor();
                 _linkMonitor.OnEvent += HandleLinkEvent;
@@ -63,7 +68,7 @@ internal sealed class DevReceiverService : IDisposable
 
                 StartClipboardIfNeeded(_cts.Token);
                 IsRunning = true;
-                Log($"Receiving KM frames on UDP :{kmPort}.");
+                Log($"Receiving KM frames on UDP :{kmPort} from {ExpectedPeerHost} only.");
                 if (!string.IsNullOrWhiteSpace(ClipboardPeer))
                     Log($"Clipboard sync listening on TCP :{clipboardPort}, peer {ClipboardPeer}:{clipboardPort}.");
                 StatsChanged?.Invoke();

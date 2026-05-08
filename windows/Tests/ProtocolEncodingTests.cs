@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using BarelyReal.Core.Clipboard;
@@ -104,6 +105,27 @@ internal static class ProtocolEncodingTests
                 Expect.Equal(ex.Error, BrpCodecError.UnknownType);
                 Expect.Equal(ex.UnknownTypeByte, (byte?)0x42);
             }
+        });
+
+        TestRunner.Run("udpKmSourceFilterAllowsOnlyExpectedAddress", () =>
+        {
+            var filter = UdpKmSourceFilter.FromAddresses("mac", IPAddress.Parse("192.168.0.101"));
+            Expect.True(filter.Enabled, "filter should be enabled");
+            Expect.True(filter.Allows(IPAddress.Parse("192.168.0.101")), "expected peer must pass");
+            Expect.True(!filter.Allows(IPAddress.Parse("192.168.0.102")), "unexpected peer must drop");
+        });
+
+        TestRunner.Run("udpKmSourceFilterNormalizesMappedIpv4", () =>
+        {
+            var filter = UdpKmSourceFilter.FromAddresses("mac", IPAddress.Parse("192.168.0.101").MapToIPv6());
+            Expect.True(filter.Allows(IPAddress.Parse("192.168.0.101")), "mapped IPv4 should match IPv4 remote");
+        });
+
+        TestRunner.Run("udpKmSourceFilterDisabledAllowsAnyAddress", () =>
+        {
+            var filter = UdpKmSourceFilter.FromHost("");
+            Expect.True(!filter.Enabled, "blank host should disable filtering");
+            Expect.True(filter.Allows(IPAddress.Parse("10.0.0.25")), "disabled filter should allow any source");
         });
 
         TestRunner.Run("controlFrameRoundTripKeepAlive", () =>

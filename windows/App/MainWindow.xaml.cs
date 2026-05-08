@@ -290,10 +290,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        var peerHost = ClipboardPeerBox.Text.Trim();
         try
         {
-            _receiver.Start(kmPort, ClipboardPeerBox.Text, clipboardPort);
-            StartControl(ClipboardPeerBox.Text);
+            _receiver.Start(kmPort, peerHost, clipboardPort);
+            StartControl(peerHost);
         }
         catch (Exception ex)
         {

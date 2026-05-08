@@ -6,7 +6,19 @@ import Network
 
 /// Receives KM frames from a remote peer (e.g. Windows) and injects them locally.
 final class MacReceiverSession {
+    enum ReceiverError: LocalizedError {
+        case missingAllowedPeer
+
+        var errorDescription: String? {
+            switch self {
+            case .missingAllowedPeer:
+                "Windows IP is required before starting Windows → Mac input."
+            }
+        }
+    }
+
     private let kmPort: UInt16
+    private let peerFilter: UdpPeerFilter
     private let log: (String) -> Void
 
     private let stream = UdpKmStream()
@@ -15,17 +27,24 @@ final class MacReceiverSession {
 
     private(set) var receivedCount = 0
     private(set) var isLinkUp = false
+    private var droppedCount = 0
+    private var lastDropLog = Date.distantPast
     var lockOnDisconnect = false
     var onLinkChange: ((Bool) -> Void)?
 
-    init(kmPort: UInt16, log: @escaping (String) -> Void) {
+    init(kmPort: UInt16, allowedPeerHost: String, log: @escaping (String) -> Void) {
         self.kmPort = kmPort
+        self.peerFilter = UdpPeerFilter(expectedHost: allowedPeerHost)
         self.log = log
     }
 
     func start() throws {
-        stream.onFrame = { [weak self] frame in
-            self?.handle(frame)
+        guard peerFilter.isActive else {
+            throw ReceiverError.missingAllowedPeer
+        }
+
+        stream.onFrameFrom = { [weak self] frame, endpoint in
+            self?.handle(frame, remote: endpoint)
         }
         try stream.bind(localPort: kmPort)
 
@@ -51,7 +70,7 @@ final class MacReceiverSession {
         }
         linkMonitor.start()
 
-        log("Receiving KM frames on UDP :\(kmPort)")
+        log("Receiving KM frames on UDP :\(kmPort) from trusted peer \(peerFilter.expectedHost)")
     }
 
     func stop() {
@@ -60,7 +79,14 @@ final class MacReceiverSession {
         isLinkUp = false
     }
 
-    private func handle(_ frame: KmFrame) {
+    private func handle(_ frame: KmFrame, remote endpoint: NWEndpoint) {
+        guard let remoteHost = remoteHost(from: endpoint),
+              peerFilter.allows(remoteHost: remoteHost)
+        else {
+            noteDroppedFrame(from: endpoint)
+            return
+        }
+
         linkMonitor.noteFrame()
         if frame.type == .heartbeat || frame.type == .clockSync {
             return
@@ -76,6 +102,33 @@ final class MacReceiverSession {
         if receivedCount <= 10 || receivedCount % 500 == 0 {
             log("received seq=\(frame.seq) type=\(frame.type)")
         }
+    }
+
+    private func remoteHost(from endpoint: NWEndpoint) -> String? {
+        guard case let .hostPort(host, _) = endpoint else {
+            return nil
+        }
+
+        switch host {
+        case .name(let name, _):
+            return name
+        case .ipv4(let address):
+            return "\(address)"
+        case .ipv6(let address):
+            return "\(address)"
+        @unknown default:
+            return "\(host)"
+        }
+    }
+
+    private func noteDroppedFrame(from endpoint: NWEndpoint) {
+        droppedCount += 1
+        let now = Date()
+        guard droppedCount <= 3 || now.timeIntervalSince(lastDropLog) > 10 else {
+            return
+        }
+        lastDropLog = now
+        log("Dropped KM frame from untrusted UDP peer \(endpoint). Expected \(peerFilter.expectedHost).")
     }
 
     private func lockDisplay() {

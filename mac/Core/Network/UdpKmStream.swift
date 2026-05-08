@@ -9,6 +9,7 @@ public final class UdpKmStream {
     }
 
     public var onFrame: ((KmFrame) -> Void)?
+    public var onFrameFrom: ((KmFrame, NWEndpoint) -> Void)?
 
     private let queue: DispatchQueue
     private var listener: NWListener?
@@ -67,6 +68,7 @@ public final class UdpKmStream {
                 do {
                     let frame = try KmFrameCodec.decode(content)
                     self.onFrame?(frame)
+                    self.onFrameFrom?(frame, connection.endpoint)
                 } catch {
                     // Malformed UDP datagrams are dropped. Control channel will own reconnect policy.
                 }
