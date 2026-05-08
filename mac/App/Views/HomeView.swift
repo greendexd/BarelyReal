@@ -42,68 +42,65 @@ struct HomeView: View {
     private var isRunning: Bool { store.kmRunning || store.clipboardRunning }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                ModeSwitcher(
-                    mode: modeBinding,
-                    isRunning: isRunning,
-                    onModeWillChange: onStop
-                )
+        VisionPage(
+            title: "Control Deck",
+            subtitle: "Cursor, keyboard, clipboard, and safety state in one place.",
+            systemImage: "command.circle.fill"
+        ) {
+            ModeSwitcher(
+                mode: modeBinding,
+                isRunning: isRunning,
+                onModeWillChange: onStop
+            )
 
-                StatusHero(
-                    state: heroState,
-                    isRunning: isRunning,
-                    primaryAction: {
-                        if isRunning { onStop() } else { onStart() }
-                    }
-                )
-
-                PermissionBanner(
-                    accessibilityGranted: store.accessibilityGranted,
-                    inputMonitoringGranted: store.inputMonitoringGranted,
-                    onOpenAccessibility: store.openAccessibilitySettings,
-                    onOpenInputMonitoring: store.openInputMonitoringSettings,
-                    onRefresh: store.refreshPermissions
-                )
-
-                if mode == .sendToWindows {
-                    SendQuickPanel(
-                        peerHost: $peerHost,
-                        kmPort: kmPort,
-                        clipboardPort: clipboardPort
-                    )
-                } else {
-                    ReceiveQuickPanel(
-                        kmPort: kmPort,
-                        clipboardPort: clipboardPort,
-                        clipboardPeer: peerHost,
-                        isRunning: store.kmRunning
-                    )
+            StatusHero(
+                state: heroState,
+                isRunning: isRunning,
+                primaryAction: {
+                    if isRunning { onStop() } else { onStart() }
                 }
+            )
 
-                if isRunning || !store.logLines.isEmpty {
-                    QuickStatsRow(store: store, mode: mode)
-                }
+            PermissionBanner(
+                accessibilityGranted: store.accessibilityGranted,
+                inputMonitoringGranted: store.inputMonitoringGranted,
+                onOpenAccessibility: store.openAccessibilitySettings,
+                onOpenInputMonitoring: store.openInputMonitoringSettings,
+                onRefresh: store.refreshPermissions
+            )
 
-                ClipboardTestCard(
-                    onTestText: onTestText,
-                    onTestImage: onTestImage,
-                    enabled: store.clipboardRunning || isRunning
+            QuickStatsRow(store: store, mode: mode)
+
+            if mode == .sendToWindows {
+                SendQuickPanel(
+                    peerHost: $peerHost,
+                    kmPort: kmPort,
+                    clipboardPort: clipboardPort
                 )
+            } else {
+                ReceiveQuickPanel(
+                    kmPort: kmPort,
+                    clipboardPort: clipboardPort,
+                    clipboardPeer: peerHost,
+                    isRunning: store.kmRunning
+                )
+            }
 
-                if let error = store.lastError {
+            ClipboardTestCard(
+                onTestText: onTestText,
+                onTestImage: onTestImage,
+                enabled: store.clipboardRunning || isRunning
+            )
+
+            if let error = store.lastError {
+                VisionCard {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(VisionPalette.amber)
                         .textSelection(.enabled)
-                        .padding(.top, 4)
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 }
 
@@ -147,8 +144,12 @@ private struct ModeSwitcher: View {
             }
         }
         .padding(3)
-        .background(Color(nsColor: .controlColor).opacity(0.4),
-                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .background(Color(nsColor: .controlColor).opacity(0.35),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        )
     }
 }
 
@@ -158,14 +159,13 @@ private struct SendQuickPanel: View {
     let clipboardPort: Int
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VisionCard {
+            VisionSectionTitle("Windows target", subtitle: "Direct LAN endpoint", systemImage: "laptopcomputer")
+
             HStack(spacing: 12) {
-                Image(systemName: "laptopcomputer")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 22)
+                VisionGlyphBadge(systemImage: "pc", tint: VisionPalette.blue, size: 38)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Windows machine")
+                    Text("Peer address")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextField("192.168.0.102", text: $peerHost, prompt: Text("Windows IP address"))
@@ -175,20 +175,13 @@ private struct SendQuickPanel: View {
                 Spacer()
             }
 
-            Divider()
+            VisionDivider()
 
             HStack(spacing: 18) {
                 detail(icon: "antenna.radiowaves.left.and.right", title: "Keyboard & mouse", value: "UDP \(kmPort)")
                 detail(icon: "doc.on.clipboard", title: "Clipboard", value: "TCP \(clipboardPort)")
             }
         }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 
     private func detail(icon: String, title: String, value: String) -> some View {
@@ -214,12 +207,13 @@ private struct ReceiveQuickPanel: View {
     let isRunning: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VisionCard {
+            VisionSectionTitle("Mac receiver", subtitle: "Incoming Windows control", systemImage: "dot.radiowaves.left.and.right")
+
             HStack(spacing: 10) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(.secondary)
-                Text("Listening on this Mac")
-                    .font(.callout.weight(.medium))
+                VisionStatusDot(kind: isRunning ? .active : .idle)
+                Text(isRunning ? "Listening" : "Standby")
+                    .font(.callout.weight(.semibold))
                 Spacer()
             }
             HStack(spacing: 18) {
@@ -227,24 +221,17 @@ private struct ReceiveQuickPanel: View {
                 detail(icon: "doc.on.clipboard", title: "Clipboard peer", value: clipboardPeer.isEmpty ? "—" : clipboardPeer)
             }
 
-            Divider()
+            VisionDivider()
 
             Label(
                 isRunning
-                    ? "Now start Windows in “Windows → Mac” mode and enter this Mac IP there."
-                    : "Press Start here first, then start Windows in “Windows → Mac” mode.",
+                    ? "Receiver ready"
+                    : "Receiver paused",
                 systemImage: isRunning ? "checkmark.circle" : "play.circle"
             )
             .font(.caption)
-            .foregroundStyle(isRunning ? .green : .secondary)
+            .foregroundStyle(isRunning ? VisionPalette.mint : .secondary)
         }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 
     private func detail(icon: String, title: String, value: String) -> some View {
@@ -268,27 +255,34 @@ private struct QuickStatsRow: View {
     let mode: MacKmMode
 
     var body: some View {
-        HStack(spacing: 12) {
-            StatPill(
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
+            VisionMetricTile(
                 title: mode == .sendToWindows ? "KM stream" : "Receiving",
                 value: store.kmRunning ? "Active" : "Idle",
                 systemImage: "keyboard",
-                tint: store.kmRunning ? .green : .secondary
+                tint: store.kmRunning ? VisionPalette.mint : .secondary
             )
 
-            StatPill(
+            VisionMetricTile(
                 title: "Clipboard",
                 value: store.clipboardRunning ? "Synced" : "Idle",
                 systemImage: "doc.on.clipboard",
-                tint: store.clipboardRunning ? .blue : .secondary
+                tint: store.clipboardRunning ? VisionPalette.blue : .secondary
             )
 
             if mode == .receiveFromWindows {
-                StatPill(
+                VisionMetricTile(
                     title: "Link",
                     value: !store.kmRunning ? "—" : (store.receiverLinkUp ? "Up" : "Down"),
                     systemImage: store.receiverLinkUp ? "checkmark.circle" : "xmark.circle",
-                    tint: store.receiverLinkUp ? .green : .orange
+                    tint: store.receiverLinkUp ? VisionPalette.mint : VisionPalette.amber
+                )
+            } else {
+                VisionMetricTile(
+                    title: "Screens",
+                    value: "\(store.localDisplays.count)+\(store.remoteDisplays.count)",
+                    systemImage: "rectangle.split.2x1",
+                    tint: VisionPalette.amber
                 )
             }
         }
@@ -301,17 +295,11 @@ private struct ClipboardTestCard: View {
     let enabled: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VisionCard {
             HStack(spacing: 8) {
-                Image(systemName: "wand.and.stars")
-                    .foregroundStyle(.secondary)
-                Text("Test clipboard")
-                    .font(.callout.weight(.semibold))
+                VisionSectionTitle("Clipboard probes", subtitle: "Manual channel check", systemImage: "wand.and.stars")
                 Spacer()
             }
-            Text("Send a test snippet to the peer to verify the clipboard channel.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
                 Button(action: onTestText) {
@@ -326,12 +314,5 @@ private struct ClipboardTestCard: View {
             .controlSize(.regular)
             .disabled(!enabled)
         }
-        .padding(18)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 }

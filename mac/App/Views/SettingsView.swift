@@ -11,124 +11,111 @@ struct SettingsView: View {
     @Binding var kmSharedSecret: String
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Settings")
-                        .font(.title2.weight(.semibold))
-                    Text("Advanced controls. Defaults work for most setups.")
-                        .font(.callout)
+        VisionPage(
+            title: "Systems",
+            subtitle: "Transport, input feel, permissions, and safety controls.",
+            systemImage: "gearshape.fill"
+        ) {
+            section(title: "Network", icon: "network") {
+                settingRow("Control port") {
+                    TextField("24800", value: $controlPort, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 110)
+                }
+                settingRow("Keyboard & mouse port") {
+                    TextField("24801", value: $kmPort, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 110)
+                }
+                settingRow("Clipboard port") {
+                    TextField("24802", value: $clipboardPort, format: .number)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: 110)
+                }
+            }
+
+            section(title: "Input feel", icon: "cursorarrow.motionlines") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Slider(
+                            value: scrollSpeedDoubleBinding,
+                            in: 1...20,
+                            step: 1
+                        )
+                        Text("\(scrollSpeed)")
+                            .font(.system(.callout, design: .monospaced))
+                            .frame(width: 32, alignment: .trailing)
+                    }
+                    Text("Default 7. Lower values soften wheel events.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            section(title: "Privacy & safety", icon: "lock.shield") {
+                VStack(alignment: .leading, spacing: 8) {
+                    settingRow("KM shared secret") {
+                        SecureField("Same secret on both computers", text: $kmSharedSecret)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 260)
+                    }
+                    Text("HMAC guard for dev UDP frames until TLS pairing lands.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                section(title: "Network", icon: "network") {
-                    settingRow("Control port") {
-                        TextField("24800", value: $controlPort, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 110)
-                    }
-                    settingRow("Keyboard & mouse port") {
-                        TextField("24801", value: $kmPort, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 110)
-                    }
-                    settingRow("Clipboard port") {
-                        TextField("24802", value: $clipboardPort, format: .number)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 110)
-                    }
-                }
+                VisionDivider()
 
-                section(title: "Input feel", icon: "cursorarrow.motionlines") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Slider(
-                                value: scrollSpeedDoubleBinding,
-                                in: 1...20,
-                                step: 1
-                            )
-                            Text("\(scrollSpeed)")
-                                .font(.system(.callout, design: .monospaced))
-                                .frame(width: 32, alignment: .trailing)
-                        }
-                        Text("Scroll wheel sensitivity. Default 7 feels natural; higher values are faster.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                section(title: "Privacy & safety", icon: "lock.shield") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        settingRow("KM shared secret") {
-                            SecureField("Same secret on both computers", text: $kmSharedSecret)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(maxWidth: 260)
-                        }
-                        Text("When set on both machines, UDP keyboard/mouse frames are HMAC-authenticated before injection. This dev secret is session-only until PIN pairing lands.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Divider()
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "keyboard")
-                                .foregroundStyle(.secondary)
-                            Text("Emergency return to Mac")
-                                .font(.callout.weight(.medium))
-                            Spacer()
-                            Text("⌃⌥⌘Esc")
-                                .font(.system(.callout, design: .monospaced).weight(.semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(Color(nsColor: .separatorColor).opacity(0.25),
-                                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        }
-                        Text("Always releases the Mac cursor and keyboard, even while Windows is active.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Divider()
-
-                    Toggle(isOn: $lockOnDisconnect) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Lock display when KM link drops")
-                            Text("Triggers after 5 seconds of silence in receive mode.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .onChange(of: lockOnDisconnect) { _, value in
-                        store.setLockOnDisconnect(value)
-                    }
-                }
-
-                section(title: "Permissions", icon: "hand.raised") {
-                    permissionRow(name: "Accessibility",
-                                  granted: store.accessibilityGranted,
-                                  open: store.openAccessibilitySettings)
-                    permissionRow(name: "Input Monitoring",
-                                  granted: store.inputMonitoringGranted,
-                                  open: store.openInputMonitoringSettings)
-
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
-                        Button("Refresh", systemImage: "arrow.clockwise", action: store.refreshPermissions)
-                        Button("Request Input Monitoring", action: store.requestInputMonitoring)
+                        Image(systemName: "keyboard")
+                            .foregroundStyle(.secondary)
+                        Text("Emergency return to Mac")
+                            .font(.callout.weight(.medium))
                         Spacer()
-                        Button(role: .destructive, action: store.resetBarelyRealPermissions) {
-                            Text("Reset")
-                        }
+                        Text("⌃⌥⌘Esc")
+                            .font(.system(.callout, design: .monospaced).weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color(nsColor: .separatorColor).opacity(0.25),
+                                        in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    .controlSize(.small)
+                }
+
+                VisionDivider()
+
+                Toggle(isOn: $lockOnDisconnect) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Lock display when KM link drops")
+                        Text("Receive mode safety")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: lockOnDisconnect) { _, value in
+                    store.setLockOnDisconnect(value)
                 }
             }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
+
+            section(title: "Permissions", icon: "hand.raised") {
+                permissionRow(name: "Accessibility",
+                              granted: store.accessibilityGranted,
+                              open: store.openAccessibilitySettings)
+                permissionRow(name: "Input Monitoring",
+                              granted: store.inputMonitoringGranted,
+                              open: store.openInputMonitoringSettings)
+
+                HStack(spacing: 8) {
+                    Button("Refresh", systemImage: "arrow.clockwise", action: store.refreshPermissions)
+                    Button("Request Input Monitoring", action: store.requestInputMonitoring)
+                    Spacer()
+                    Button(role: .destructive, action: store.resetBarelyRealPermissions) {
+                        Text("Reset")
+                    }
+                }
+                .controlSize(.small)
+            }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var scrollSpeedDoubleBinding: Binding<Double> {
@@ -140,26 +127,12 @@ struct SettingsView: View {
 
     private func section<Content: View>(title: String,
                                         icon: String,
-                                        @ViewBuilder content: () -> Content) -> some View {
+                                        @ViewBuilder content: @escaping () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .foregroundStyle(.secondary)
-                Text(title)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            VStack(alignment: .leading, spacing: 14) {
+            VisionSectionTitle(title, systemImage: icon)
+            VisionCard {
                 content()
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(.quaternary, lineWidth: 1)
-            )
         }
     }
 

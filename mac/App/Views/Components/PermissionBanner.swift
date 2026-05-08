@@ -44,10 +44,10 @@ struct PermissionBanner: View {
                 Spacer()
             }
             .padding(16)
-            .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(VisionPalette.amber.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.orange.opacity(0.25), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(VisionPalette.amber.opacity(0.28), lineWidth: 1)
             )
         }
     }

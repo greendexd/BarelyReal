@@ -11,21 +11,31 @@ enum AppSection: Hashable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: "Home"
-        case .devices: "Devices"
+        case .home: "Control"
+        case .devices: "Layout"
         case .clipboard: "Clipboard"
-        case .activity: "Activity"
-        case .settings: "Settings"
+        case .activity: "Telemetry"
+        case .settings: "Systems"
         }
     }
 
     var icon: String {
         switch self {
-        case .home: "house.fill"
+        case .home: "command.circle.fill"
         case .devices: "macbook.and.iphone"
         case .clipboard: "doc.on.clipboard"
         case .activity: "waveform"
         case .settings: "gearshape.fill"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .home: "handoff"
+        case .devices: "monitors"
+        case .clipboard: "shared"
+        case .activity: "logs"
+        case .settings: "ports"
         }
     }
 }
@@ -48,12 +58,28 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(AppSection.allCases, selection: $selection) { section in
-                NavigationLink(value: section) {
-                    Label(section.title, systemImage: section.icon)
+            VStack(spacing: 0) {
+                sidebarHeader
+                List(AppSection.allCases, selection: $selection) { section in
+                    NavigationLink(value: section) {
+                        HStack(spacing: 10) {
+                            Image(systemName: section.icon)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 17)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(section.title)
+                                    .lineLimit(1)
+                                Text(section.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
+                .listStyle(.sidebar)
             }
-            .listStyle(.sidebar)
             .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
             .toolbar(removing: .sidebarToggle)
             .safeAreaInset(edge: .bottom) {
@@ -68,9 +94,12 @@ struct RootView: View {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 8) {
                     Image(systemName: "rectangle.connected.to.line.below")
-                        .foregroundStyle(.tint)
-                    Text("BarelyReal")
+                        .foregroundStyle(VisionPalette.blue)
+                    Text("Codex Vision")
                         .font(.headline)
+                    Text("BarelyReal")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -135,28 +164,52 @@ struct RootView: View {
 
     // MARK: - Sidebar accessories
 
-    private var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider()
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(store.kmRunning ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
-                Text(store.kmRunning ? "Running" : "Stopped")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
+    private var sidebarHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                VisionGlyphBadge(systemImage: "cursorarrow.motionlines", tint: VisionPalette.blue, size: 34)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Codex Vision")
+                        .font(.headline)
+                    Text("shared desktop")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.top, 14)
+            .padding(.bottom, 6)
+        }
+    }
+
+    private var sidebarFooter: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    VisionStatusDot(kind: store.kmRunning ? .active : .idle)
+                    Text(store.kmRunning ? "Session active" : "Ready")
+                        .font(.caption.weight(.medium))
+                    Spacer()
+                }
+                HStack(spacing: 8) {
+                    Image(systemName: store.clipboardRunning ? "doc.on.clipboard.fill" : "doc.on.clipboard")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                    Text(store.clipboardRunning ? "Clipboard linked" : "Clipboard idle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
     }
 
     private var statusToolbarBadge: some View {
         HStack(spacing: 6) {
-            Circle()
-                .fill(store.kmRunning ? Color.green : Color.secondary.opacity(0.5))
-                .frame(width: 8, height: 8)
+            VisionStatusDot(kind: store.kmRunning ? .active : .idle)
             Text(store.kmRunning ? "Connected" : "Idle")
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)

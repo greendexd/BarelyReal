@@ -14,11 +14,12 @@ struct ClipboardHistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 12) {
+                VisionGlyphBadge(systemImage: "doc.on.clipboard", tint: VisionPalette.mint, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Clipboard history")
+                    Text("Clipboard")
                         .font(.title2.weight(.semibold))
-                    Text("Last \(store.clipboardEntries.count) items synced through BarelyReal.")
+                    Text("\(store.clipboardEntries.count) recent shared items")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -58,7 +59,7 @@ struct ClipboardHistoryView: View {
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .underPageBackgroundColor))
         .onAppear { store.loadClipboardHistory() }
     }
 }
@@ -88,9 +89,9 @@ private struct HistoryRow: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.quaternary, lineWidth: 1)
         )
     }

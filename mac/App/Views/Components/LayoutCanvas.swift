@@ -29,10 +29,10 @@ struct LayoutCanvas: View {
             let previewRemoteScreens = remoteScreens.isEmpty ? [] : previewLayout.screens(peerId: remotePeerId)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color(nsColor: .controlBackgroundColor))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .stroke(.quaternary, lineWidth: 1)
                     )
 
@@ -103,11 +103,7 @@ struct LayoutCanvas: View {
     private func screenChip(_ screen: ScreenRect, title: String, accent: Color, glyph: String) -> some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(LinearGradient(
-                    colors: [accent.opacity(0.18), accent.opacity(0.08)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
+                .fill(accent.opacity(0.13))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(accent.opacity(0.55), lineWidth: 1.2)

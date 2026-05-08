@@ -5,13 +5,19 @@ struct ActivityView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Activity")
-                    .font(.title2.weight(.semibold))
+            HStack(spacing: 12) {
+                VisionGlyphBadge(systemImage: "waveform", tint: VisionPalette.blue, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Telemetry")
+                        .font(.title2.weight(.semibold))
+                    Text("Sanitized runtime events")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button("Export Diagnostics", systemImage: "square.and.arrow.up", action: store.exportDiagnostics)
                     .controlSize(.small)
-                Text("\(store.logLines.count) events")
+                Text("\(store.logLines.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -43,7 +49,7 @@ struct ActivityView: View {
                                 EventRow(line: line)
                                     .background(index.isMultiple(of: 2)
                                                 ? Color.clear
-                                                : Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                                                : Color(nsColor: .controlBackgroundColor).opacity(0.45))
                                     .id(index)
                             }
                         }
@@ -57,6 +63,6 @@ struct ActivityView: View {
                 }
             }
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 }

@@ -9,35 +9,23 @@ struct DevicesView: View {
     @Binding var peerBroadcast: String
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Devices")
-                        .font(.title2.weight(.semibold))
-                    Text("Arrange every monitor across this Mac and your Windows peer.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                deviceCard
-                pairingCard
-                wakeOnLanCard
-
-                pendingFeaturesNote
-            }
-            .padding(28)
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .top)
+        VisionPage(
+            title: "Layout Matrix",
+            subtitle: "Every screen in one shared coordinate plane.",
+            systemImage: "rectangle.split.2x1"
+        ) {
+            deviceCard
+            pairingCard
+            wakeOnLanCard
+            pendingFeaturesNote
         }
-        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var wakeOnLanCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VisionCard {
             HStack(spacing: 8) {
                 Image(systemName: "powerplug.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(VisionPalette.amber)
                 Text("Wake on LAN")
                     .font(.callout.weight(.semibold))
                 Spacer()
@@ -73,27 +61,12 @@ struct DevicesView: View {
                 .disabled(peerMac.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 
     private var deviceCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VisionCard {
             HStack(alignment: .top, spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.12))
-                        .frame(width: 48, height: 48)
-                    Image(systemName: "pc")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .symbolRenderingMode(.hierarchical)
-                }
+                VisionGlyphBadge(systemImage: "pc", tint: VisionPalette.blue, size: 48)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -110,7 +83,7 @@ struct DevicesView: View {
                         .foregroundStyle(.secondary)
                     Text(store.remoteScreensStale ? "Last known screens" : "\(store.remoteDisplays.count) screen\(store.remoteDisplays.count == 1 ? "" : "s") synced")
                         .font(.caption)
-                        .foregroundStyle(store.remoteScreensStale ? .orange : .secondary)
+                        .foregroundStyle(store.remoteScreensStale ? VisionPalette.amber : .secondary)
                 }
 
                 Spacer()
@@ -134,8 +107,8 @@ struct DevicesView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-
-            Divider().padding(.vertical, 16)
+            VisionDivider()
+                .padding(.vertical, 2)
 
             VStack(spacing: 12) {
                 editableRow(
@@ -163,20 +136,13 @@ struct DevicesView: View {
                 }
             }
         }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 
     private var pairingCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VisionCard {
             HStack(spacing: 8) {
                 Image(systemName: "key.horizontal.fill")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(VisionPalette.blue)
                 Text("Pairing & trust")
                     .font(.callout.weight(.semibold))
                 Spacer()
@@ -239,13 +205,6 @@ struct DevicesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
-        )
     }
 
     private var discoveredPeersList: some View {
@@ -257,7 +216,7 @@ struct DevicesView: View {
             ForEach(store.discoveredPeers) { peer in
                 HStack(spacing: 10) {
                     Image(systemName: peer.stale ? "wifi.exclamationmark" : "network")
-                        .foregroundStyle(peer.stale ? .orange : .green)
+                            .foregroundStyle(peer.stale ? VisionPalette.amber : VisionPalette.mint)
                         .frame(width: 18)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -303,10 +262,10 @@ struct DevicesView: View {
         let trusted = store.isTrusted(peer: peer)
         Text(trusted ? "Trusted" : "Untrusted")
             .font(.caption.weight(.semibold))
-            .foregroundStyle(trusted ? .green : .orange)
+            .foregroundStyle(trusted ? VisionPalette.mint : VisionPalette.amber)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background((trusted ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+            .background((trusted ? VisionPalette.mint : VisionPalette.amber).opacity(0.12), in: Capsule())
     }
 
     private func fingerprintRow(title: String, value: String) -> some View {
@@ -353,7 +312,7 @@ struct DevicesView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.accentColor.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(VisionPalette.blue.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

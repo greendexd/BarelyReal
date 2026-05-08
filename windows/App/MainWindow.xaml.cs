@@ -740,7 +740,7 @@ public partial class MainWindow : Window
         var linkUp  = !IsSendMode && _receiver.LinkUp;
 
         // Top-bar pill + sidebar footer
-        var greyDot = new SolidColorBrush(Color.FromRgb(0xBF, 0xBF, 0xBF));
+        var greyDot = new SolidColorBrush(Color.FromRgb(0x73, 0x81, 0x95));
         StatusDot.Fill = running
             ? (Brush)FindResource("SuccessBrush")
             : greyDot;
@@ -844,7 +844,7 @@ public partial class MainWindow : Window
         {
             HeroIcon.Foreground = (Brush)FindResource("MutedBrush");
             if (HeroIcon.Parent is Border border)
-                border.Background = new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00));
+                border.Background = (Brush)FindResource("SurfaceBrush");
             return;
         }
         HeroIcon.Foreground = (Brush)FindResource(foregroundResource);
