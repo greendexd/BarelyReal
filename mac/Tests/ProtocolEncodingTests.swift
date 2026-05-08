@@ -158,6 +158,13 @@ enum ProtocolEncodingTests {
             try expectEqual(PairingService.sas(fromExporterBytes: Data([0x2A, 0x00, 0x00, 0x00])), "000042")
         }
 
+        r.run("pairingDevPinIsDeterministicForEitherOrder") {
+            let pin = PairingService.devPairingPin(localFingerprint: "local-fingerprint", peerFingerprint: "peer-fingerprint")
+            try expectEqual(pin, "736400")
+            try expectEqual(pin, PairingService.devPairingPin(localFingerprint: "peer-fingerprint", peerFingerprint: "local-fingerprint"))
+            try expectEqual(PairingService.devPairingPin(localFingerprint: "", peerFingerprint: "peer-fingerprint"), nil)
+        }
+
         r.run("pairingPinLockoutAfterFiveWrongAttempts") {
             let service = PairingService(maxWrongAttempts: 5, lockoutSeconds: 60)
             for _ in 0..<4 {

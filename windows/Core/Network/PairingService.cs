@@ -1,4 +1,6 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace BarelyReal.Core.Network;
 
@@ -62,6 +64,21 @@ public sealed class PairingService
         return pin.ToString("D6");
     }
 
+    public static string DevPairingPin(string localFingerprint, string peerFingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(localFingerprint))
+            throw new ArgumentException("Local fingerprint is required", nameof(localFingerprint));
+        if (string.IsNullOrWhiteSpace(peerFingerprint))
+            throw new ArgumentException("Peer fingerprint is required", nameof(peerFingerprint));
+
+        var fingerprints = new[] { localFingerprint.Trim(), peerFingerprint.Trim() };
+        Array.Sort(fingerprints, StringComparer.Ordinal);
+        var material = Encoding.UTF8.GetBytes($"barelyreal dev pairing scaffold v1\n{fingerprints[0]}\n{fingerprints[1]}");
+        Span<byte> digest = stackalloc byte[32];
+        SHA256.HashData(material, digest);
+        return Sas(digest);
+    }
+
     public void Confirm(string enteredPin, string expectedPin)
     {
         if (_lockoutUntil is { } lockoutUntil)
@@ -94,6 +111,15 @@ public sealed class PairingService
     public IReadOnlyList<PinnedPeer> LoadPinnedPeers()
     {
         return _pinnedPeerStore.Load();
+    }
+
+    public bool IsPeerPinned(string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return false;
+
+        return LoadPinnedPeers().Any(peer =>
+            peer.PublicKeyFingerprint.Equals(fingerprint.Trim(), StringComparison.Ordinal));
     }
 
     public void PinPeer(PinnedPeer peer)

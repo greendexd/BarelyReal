@@ -41,13 +41,18 @@ The repository is in early development. Current strengths:
   `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - Dev mDNS/Bonjour publish/browse works on `_barelyreal._tcp.local.` and fills
   the existing peer IP fields while preserving manual fallback.
+- Dev pairing/trust scaffolding is visible in both apps: each device advertises
+  a durable local fingerprint, both sides derive the same 6-digit dev PIN from
+  the two fingerprints, and the user can pin or forget the discovered peer
+  fingerprint.
 - Dev KM works over UDP `24801` with trusted peer IP source filtering and
   optional `BRKM` HMAC-SHA256 datagram authentication via a session-only shared
   secret. Authenticated dev mode also drops duplicate and old KM frames with a
   1024-frame replay window.
 - Dev clipboard sync uses TCP `24802` for text, PNG images, and file bundles.
-- Pairing, identity, TLS, file transfer, and release packaging have
-  scaffolding or docs, but not enough enforced behavior for public release.
+- Identity, trust storage, file transfer, and release packaging have scaffolding
+  or dev implementations, but TLS-backed pairing is not enforced enough for
+  public release.
 
 Non-negotiable gaps before release:
 
@@ -55,8 +60,11 @@ Non-negotiable gaps before release:
 - UDP KM must still be encrypted and replay-protected with exporter-derived
   AEAD; source filtering and the temporary HMAC shared secret are dev-mode
   guards, not final pairing.
-- PIN pairing, peer pinning, lockout, identity reset, and MITM handling must be
-  connected to both UIs and persisted correctly.
+- Production PIN pairing, peer pinning, lockout, identity reset, and MITM
+  handling must be connected to both UIs and persisted correctly. The current
+  fingerprint trust UI is a dev scaffold because the fingerprint is still
+  learned from unauthenticated mDNS rather than a TLS exporter-verified pairing
+  handshake.
 - macOS Accessibility and Input Monitoring flows must be reliable for the
   installed app bundle, not just terminal tools.
 - Windows injection into normal and elevated windows must have clear privilege

@@ -510,6 +510,81 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Dev pairing scaffold -->
+                        <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                            <StackPanel>
+                                <DockPanel LastChildFill="False" Margin="0,0,0,12">
+                                    <StackPanel DockPanel.Dock="Left">
+                                        <TextBlock Text="Dev pairing scaffold" FontWeight="SemiBold" FontSize="14" />
+                                        <TextBlock Text="Fingerprint pinning only; this is not TLS or production authentication."
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   FontSize="11"
+                                                   Margin="0,3,0,0"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="TrustStatusText"
+                                               DockPanel.Dock="Right"
+                                               Text="No peer selected"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Top" />
+                                </DockPanel>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="1.2*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                        <TextBlock Text="Discovered peer" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                        <ComboBox x:Name="PairingPeerCombo"
+                                                  Margin="0,4,0,10"
+                                                  DisplayMemberPath="DisplayText" />
+
+                                        <TextBlock Text="Selected peer fingerprint" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                        <TextBlock x:Name="PeerFingerprintText"
+                                                   Text="No discovered peer selected"
+                                                   FontFamily="Cascadia Mono, Consolas"
+                                                   FontSize="12"
+                                                   Margin="0,4,0,0"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                        <TextBlock Text="This Windows fingerprint" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                        <TextBlock x:Name="LocalFingerprintText"
+                                                   Text="loading..."
+                                                   FontFamily="Cascadia Mono, Consolas"
+                                                   FontSize="12"
+                                                   Margin="0,4,0,10"
+                                                   TextWrapping="Wrap" />
+
+                                        <TextBlock Text="6-digit dev PIN" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                        <TextBlock x:Name="DevPinText"
+                                                   Text="------"
+                                                   FontFamily="Cascadia Mono, Consolas"
+                                                   FontSize="26"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,1,0,0" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                    <Button x:Name="TrustPeerButton"
+                                            Content="Trust peer"
+                                            Style="{StaticResource PrimaryButton}"
+                                            MinWidth="104"
+                                            Click="TrustPeerButton_Click" />
+                                    <Button x:Name="UnpinPeerButton"
+                                            Content="Unpin trust"
+                                            MinWidth="104"
+                                            Margin="8,0,0,0"
+                                            Click="UnpinPeerButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Quick stats -->
                         <Grid Margin="0,16,0,0">
                             <Grid.ColumnDefinitions>

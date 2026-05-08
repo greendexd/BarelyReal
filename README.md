@@ -37,6 +37,7 @@ Implemented so far:
 - Text, PNG, and file clipboard sync over TCP port `24802`.
 - Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - mDNS/Bonjour discovery on `_barelyreal._tcp.local.` with manual IP fallback.
+- Dev pairing scaffold: both apps advertise durable device fingerprints, show a matching 6-digit dev PIN, and can Trust/Forget the discovered peer fingerprint.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
 - PIN lockout + pinned-peer identity store scaffold for pairing.
 - Wake-on-LAN packet sender.
@@ -76,7 +77,11 @@ still uses clear TCP dev mode. TLS/PIN security is the next hardening step.
 5. Optional but recommended: set the same KM shared secret in Settings on both machines before
    starting KM. This is a temporary dev-mode HMAC key until PIN pairing lands.
 
-6. Drag the peer screen group in Devices to the real physical position: left, right, top,
+6. In Devices / Home, compare the 6-digit dev PIN shown on both machines, then click Trust
+   peer on each side. This currently pins the advertised device fingerprint; it is not the final
+   TLS exporter-backed production pairing flow yet.
+
+7. Drag the peer screen group in Devices to the real physical position: left, right, top,
    bottom, or a corner/offset. Moving the cursor across a matching physical edge transfers
    control to the other machine.
 

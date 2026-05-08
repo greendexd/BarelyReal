@@ -10,6 +10,7 @@ public sealed record DiscoveredPeer(
     ushort Port,
     string Os,
     string PeerId,
+    string PublicKeyFingerprint,
     bool Stale);
 
 public sealed record MdnsAdvertisement(
@@ -205,6 +206,7 @@ public sealed class MdnsBrowser : IDisposable
                 if (properties.TryGetValue("name", out var name)) peer.Name = name;
                 if (properties.TryGetValue("os", out var os)) peer.Os = os;
                 if (properties.TryGetValue("peer_id", out var peerId)) peer.PeerId = peerId;
+                if (properties.TryGetValue("pk", out var pk)) peer.PublicKeyFingerprint = pk;
                 peer.LastSeenUtc = DateTime.UtcNow;
                 peer.ExplicitlyStale = txt.TTL == TimeSpan.Zero;
                 changed = true;
@@ -272,6 +274,7 @@ public sealed class MdnsBrowser : IDisposable
                         peer.Port,
                         peer.Os,
                         peer.PeerId,
+                        peer.PublicKeyFingerprint,
                         stale);
                 })
                 .OrderBy(static peer => peer.Stale)
@@ -325,6 +328,7 @@ public sealed class MdnsBrowser : IDisposable
         public ushort Port { get; set; }
         public string Os { get; set; } = string.Empty;
         public string PeerId { get; set; } = string.Empty;
+        public string PublicKeyFingerprint { get; set; } = string.Empty;
         public DateTime LastSeenUtc { get; set; }
         public bool ExplicitlyStale { get; set; }
     }

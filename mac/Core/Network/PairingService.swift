@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// 6-digit PIN pairing per BRP § Pairing. Derives SAS from the TLS exporter, stores pinned SPKI
@@ -37,6 +38,22 @@ public final class PairingService {
         let n = bytes.readLE(at: 0) as UInt32
         let pin = Int(n % 1_000_000)
         return String(format: "%06d", pin)
+    }
+
+    /// Temporary dev-mode PIN used before the real TLS exporter-backed pairing flow lands.
+    /// Both sides sort their advertised public-key fingerprints so the displayed 6-digit PIN
+    /// is stable no matter which machine initiates pairing.
+    public static func devPairingPin(localFingerprint: String, peerFingerprint: String) -> String? {
+        let fingerprints = [localFingerprint, peerFingerprint]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .sorted()
+
+        guard fingerprints.count == 2 else { return nil }
+
+        let material = "barelyreal dev pairing scaffold v1\n\(fingerprints[0])\n\(fingerprints[1])"
+        let digest = SHA256.hash(data: Data(material.utf8))
+        return sas(fromExporterBytes: Data(digest))
     }
 
     public func confirm(enteredPin: String, expectedPin: String) throws {

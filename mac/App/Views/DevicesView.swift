@@ -21,6 +21,7 @@ struct DevicesView: View {
                 }
 
                 deviceCard
+                pairingCard
                 wakeOnLanCard
 
                 pendingFeaturesNote
@@ -171,6 +172,82 @@ struct DevicesView: View {
         )
     }
 
+    private var pairingCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "key.horizontal.fill")
+                    .foregroundStyle(.blue)
+                Text("Pairing & trust")
+                    .font(.callout.weight(.semibold))
+                Spacer()
+                if let peer = selectedPeer {
+                    trustBadge(for: peer)
+                }
+            }
+
+            Text("Dev pairing scaffold. This pins the discovered peer fingerprint now; production pairing will bind this trust to the TLS PIN handshake.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            fingerprintRow(title: "This Mac", value: store.localFingerprint)
+
+            if let peer = selectedPeer {
+                fingerprintRow(
+                    title: "Windows",
+                    value: peer.publicKeyFingerprint.isEmpty ? "not advertised" : peer.publicKeyFingerprint
+                )
+
+                if let pin = store.devPairingPin(for: peer) {
+                    HStack(alignment: .center, spacing: 12) {
+                        Text("Dev PIN")
+                            .frame(width: 110, alignment: .leading)
+                            .font(.callout)
+                        Text(pin)
+                            .font(.system(.title3, design: .monospaced).weight(.semibold))
+                            .textSelection(.enabled)
+                        Text("Compare on Windows")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        store.trust(peer: peer)
+                    } label: {
+                        Label("Trust peer", systemImage: "checkmark.shield.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.isTrusted(peer: peer) || store.devPairingPin(for: peer) == nil)
+
+                    Button {
+                        store.untrust(peer: peer)
+                    } label: {
+                        Label("Forget", systemImage: "trash")
+                    }
+                    .disabled(!store.isTrusted(peer: peer))
+
+                    Spacer()
+                }
+            } else {
+                Label("No Windows fingerprint discovered yet. Start the Windows app or use manual IP for transport while discovery catches up.",
+                      systemImage: "network.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+        .background(Color(nsColor: .controlBackgroundColor),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        )
+    }
+
     private var discoveredPeersList: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Discovered on LAN")
@@ -213,6 +290,45 @@ struct DevicesView: View {
         let host = peer.bestHost ?? peer.hostName ?? "unresolved"
         let state = peer.stale ? "last seen" : "available"
         return "\(peer.os) \(peer.version) · \(host):\(peer.port) · \(state)"
+    }
+
+    private var selectedPeer: MdnsPeer? {
+        store.discoveredPeers.first { !$0.stale && !$0.publicKeyFingerprint.isEmpty && $0.publicKeyFingerprint != "dev" }
+            ?? store.discoveredPeers.first { !$0.publicKeyFingerprint.isEmpty && $0.publicKeyFingerprint != "dev" }
+            ?? store.discoveredPeers.first
+    }
+
+    @ViewBuilder
+    private func trustBadge(for peer: MdnsPeer) -> some View {
+        let trusted = store.isTrusted(peer: peer)
+        Text(trusted ? "Trusted" : "Untrusted")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(trusted ? .green : .orange)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background((trusted ? Color.green : Color.orange).opacity(0.12), in: Capsule())
+    }
+
+    private func fingerprintRow(title: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(title)
+                .frame(width: 110, alignment: .leading)
+                .font(.callout)
+            Text(shortFingerprint(value))
+                .font(.system(.callout, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(value)
+            Spacer()
+        }
+    }
+
+    private func shortFingerprint(_ fingerprint: String) -> String {
+        let trimmed = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 20 else { return trimmed.isEmpty ? "none" : trimmed }
+        return "\(trimmed.prefix(10))...\(trimmed.suffix(8))"
     }
 
     private func editableRow(title: String, placeholder: String, value: Binding<String>) -> some View {

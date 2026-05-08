@@ -19,6 +19,8 @@ public partial class MainWindow : Window
     private readonly DevControlSession _control = new();
     private readonly MdnsAdvertiser _mdnsAdvertiser = new();
     private readonly MdnsBrowser _mdnsBrowser = new();
+    private readonly PairingService _pairing = new();
+    private readonly DeviceIdentity.Identity _localIdentity = new DeviceIdentity().LoadOrGenerate();
     private const string LocalPeerId = "windows";
     private const string RemotePeerId = "mac";
     private const string DefaultMacHost = "192.168.0.101";
@@ -52,6 +54,7 @@ public partial class MainWindow : Window
         ClipboardPeerBox.TextChanged += MacHostBox_TextChanged;
         ControlPortBox.TextChanged += CommandInput_Changed;
         SendMacHostBox.TextChanged += MacHostBox_TextChanged;
+        PairingPeerCombo.SelectionChanged += PairingPeerCombo_SelectionChanged;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -67,6 +70,7 @@ public partial class MainWindow : Window
         _uiReady = true;
         UpdateMacCommand();
         UpdateStatus();
+        UpdatePairingPanel();
         WireLayoutDesigner();
         StartDiscovery();
         StartReceiver();
@@ -176,6 +180,34 @@ public partial class MainWindow : Window
         public string TimeLabel { get; set; } = string.Empty;
         public string SizeLabel { get; set; } = string.Empty;
         public string Preview { get; set; } = string.Empty;
+    }
+
+    public sealed class PairingPeerRow
+    {
+        public string Key { get; init; } = string.Empty;
+        public string DisplayName { get; init; } = string.Empty;
+        public string Fingerprint { get; init; } = string.Empty;
+        public bool IsMacPeer { get; init; }
+
+        public string DisplayText => string.IsNullOrWhiteSpace(Fingerprint)
+            ? $"{DisplayName} (no fingerprint)"
+            : $"{DisplayName} ({ShortFingerprint(Fingerprint)})";
+
+        public static PairingPeerRow FromPeer(DiscoveredPeer peer)
+        {
+            var host = BestHost(peer);
+            var displayName = string.IsNullOrWhiteSpace(peer.Name)
+                ? host
+                : string.IsNullOrWhiteSpace(host) ? peer.Name : $"{peer.Name} at {host}";
+
+            return new PairingPeerRow
+            {
+                Key = $"{peer.PeerId}|{host}|{peer.Port}|{peer.PublicKeyFingerprint}",
+                DisplayName = displayName,
+                Fingerprint = peer.PublicKeyFingerprint,
+                IsMacPeer = IsUsableMacPeer(peer)
+            };
+        }
     }
 
     // MARK: - Buttons
@@ -377,10 +409,11 @@ public partial class MainWindow : Window
                 "windows",
                 "0.1.0",
                 LocalPeerId,
-                "dev"));
+                _localIdentity.PublicKeyFingerprint));
             _mdnsBrowser.Start();
             if (DiscoveryStatusText is not null)
                 DiscoveryStatusText.Text = $"Discovery advertising on _barelyreal._tcp.local:{controlPort}; searching for Mac.";
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Dev pairing scaffold: advertising local fingerprint {ShortFingerprint(_localIdentity.PublicKeyFingerprint)}.");
         }
         catch (Exception ex)
         {
@@ -392,6 +425,8 @@ public partial class MainWindow : Window
 
     private void ApplyDiscoveredPeers(IReadOnlyList<DiscoveredPeer> peers)
     {
+        RefreshPairingPeerChoices(peers);
+
         var mac = peers.FirstOrDefault(IsUsableMacPeer);
         if (mac is null)
         {
@@ -426,6 +461,133 @@ public partial class MainWindow : Window
         }
 
         AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery filled Mac IP: {label}");
+    }
+
+    private void RefreshPairingPeerChoices(IReadOnlyList<DiscoveredPeer> peers)
+    {
+        if (PairingPeerCombo is null)
+            return;
+
+        var previousKey = (PairingPeerCombo.SelectedItem as PairingPeerRow)?.Key;
+        var rows = peers
+            .Where(peer => !peer.Stale)
+            .Where(peer => !peer.PeerId.Equals(LocalPeerId, StringComparison.OrdinalIgnoreCase))
+            .Select(PairingPeerRow.FromPeer)
+            .OrderByDescending(row => row.IsMacPeer)
+            .ThenBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        PairingPeerCombo.ItemsSource = rows;
+        PairingPeerCombo.SelectedItem = previousKey is null
+            ? rows.FirstOrDefault()
+            : rows.FirstOrDefault(row => row.Key.Equals(previousKey, StringComparison.OrdinalIgnoreCase)) ?? rows.FirstOrDefault();
+        UpdatePairingPanel();
+    }
+
+    private void PairingPeerCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdatePairingPanel();
+    }
+
+    private void TrustPeerButton_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedPairingPeer();
+        if (row is null
+            || string.IsNullOrWhiteSpace(row.Fingerprint)
+            || row.Fingerprint.Equals("dev", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _pairing.PinPeer(new PairingService.PinnedPeer(row.Fingerprint, row.DisplayName));
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Dev pairing scaffold: trusted peer {row.DisplayName} ({ShortFingerprint(row.Fingerprint)}).");
+        UpdatePairingPanel();
+    }
+
+    private void UnpinPeerButton_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedPairingPeer();
+        if (row is null
+            || string.IsNullOrWhiteSpace(row.Fingerprint)
+            || row.Fingerprint.Equals("dev", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        _pairing.UnpinPeer(row.Fingerprint);
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Dev pairing scaffold: unpinned peer {row.DisplayName} ({ShortFingerprint(row.Fingerprint)}).");
+        UpdatePairingPanel();
+    }
+
+    private PairingPeerRow? SelectedPairingPeer()
+    {
+        return PairingPeerCombo?.SelectedItem as PairingPeerRow;
+    }
+
+    private void UpdatePairingPanel()
+    {
+        if (LocalFingerprintText is null)
+            return;
+
+        LocalFingerprintText.Text = FormatFingerprint(_localIdentity.PublicKeyFingerprint);
+        LocalFingerprintText.ToolTip = _localIdentity.PublicKeyFingerprint;
+
+        var row = SelectedPairingPeer();
+        var hasPeer = row is not null;
+        var fingerprint = row?.Fingerprint.Trim() ?? string.Empty;
+        var hasFingerprint = hasPeer && !string.IsNullOrWhiteSpace(fingerprint);
+        var isDevPlaceholder = fingerprint.Equals("dev", StringComparison.OrdinalIgnoreCase);
+        var hasUsableFingerprint = hasFingerprint && !isDevPlaceholder;
+        var trusted = hasUsableFingerprint && _pairing.IsPeerPinned(fingerprint);
+
+        if (PeerFingerprintText is not null)
+        {
+            PeerFingerprintText.Text = hasPeer
+                ? FormatFingerprint(string.IsNullOrWhiteSpace(fingerprint) ? "not advertised" : fingerprint)
+                : "No discovered peer selected";
+            PeerFingerprintText.ToolTip = hasPeer ? fingerprint : null;
+        }
+
+        if (DevPinText is not null)
+        {
+            DevPinText.Text = hasUsableFingerprint
+                ? PairingService.DevPairingPin(_localIdentity.PublicKeyFingerprint, fingerprint)
+                : "------";
+        }
+
+        if (TrustStatusText is not null)
+        {
+            TrustStatusText.Text = !hasPeer
+                ? "No peer selected"
+                : !hasFingerprint
+                    ? "Peer has no fingerprint advertised"
+                    : isDevPlaceholder
+                        ? "Peer advertises legacy dev placeholder"
+                    : trusted ? "Trusted in dev pairing scaffold" : "Untrusted";
+            TrustStatusText.Foreground = trusted
+                ? (Brush)FindResource("SuccessBrush")
+                : !hasFingerprint || isDevPlaceholder
+                    ? (Brush)FindResource("WarningBrush")
+                    : (Brush)FindResource("MutedBrush");
+        }
+
+        if (TrustPeerButton is not null)
+            TrustPeerButton.IsEnabled = hasUsableFingerprint && !trusted;
+        if (UnpinPeerButton is not null)
+            UnpinPeerButton.IsEnabled = hasUsableFingerprint && trusted;
+    }
+
+    private static string FormatFingerprint(string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+            return "not available";
+
+        var trimmed = fingerprint.Trim();
+        return trimmed.Length <= 32
+            ? trimmed
+            : $"{trimmed[..16]}...{trimmed[^12..]}";
+    }
+
+    private static string ShortFingerprint(string fingerprint)
+    {
+        var trimmed = fingerprint.Trim();
+        return trimmed.Length <= 12 ? trimmed : trimmed[..12];
     }
 
     private static bool IsUsableMacPeer(DiscoveredPeer peer)

@@ -32,6 +32,8 @@ final class BarelyRealStore: ObservableObject {
     @Published private(set) var controlRunning = false
     @Published private(set) var remoteScreensStale = true
     @Published private(set) var discoveredPeers: [MdnsPeer] = []
+    @Published private(set) var localFingerprint = "unavailable"
+    @Published private(set) var pinnedPeers: [PairingService.PinnedPeer] = []
     @Published var permissionRefreshToken = UUID()
     @Published var lockOnDisconnect = false
     var onSuggestedPeerHost: ((String) -> Void)?
@@ -47,10 +49,13 @@ final class BarelyRealStore: ObservableObject {
     private var keepAliveTimer: Timer?
     private let mdnsAdvertiser = MdnsAdvertiser()
     private let mdnsBrowser = MdnsBrowser()
+    private let deviceIdentity = DeviceIdentity()
+    private let pairingService = PairingService()
     private var discoveryStarted = false
     private var lastSuggestedPeerHost: String?
 
     init() {
+        loadIdentityAndTrust()
         refreshDisplays()
         loadLayoutState()
         reconcileLayout()
@@ -289,7 +294,7 @@ final class BarelyRealStore: ObservableObject {
             os: "macOS",
             version: "0.1.0",
             peerId: localPeerId,
-            publicKeyFingerprint: "dev",
+            publicKeyFingerprint: localFingerprint,
             onLog: { [weak self] message in
                 Task { @MainActor in self?.appendLog(message) }
             }
@@ -308,6 +313,42 @@ final class BarelyRealStore: ObservableObject {
 
     func refreshDisplays() {
         localDisplays = DisplayEnumerator.localDisplays(peerId: localPeerId)
+    }
+
+    func isTrusted(peer: MdnsPeer) -> Bool {
+        guard isUsableFingerprint(peer.publicKeyFingerprint) else { return false }
+        return pinnedPeers.contains { $0.publicKeyFingerprint == peer.publicKeyFingerprint }
+    }
+
+    func devPairingPin(for peer: MdnsPeer) -> String? {
+        guard isUsableFingerprint(peer.publicKeyFingerprint),
+              isUsableFingerprint(localFingerprint)
+        else { return nil }
+        return PairingService.devPairingPin(
+            localFingerprint: localFingerprint,
+            peerFingerprint: peer.publicKeyFingerprint
+        )
+    }
+
+    func trust(peer: MdnsPeer) {
+        guard isUsableFingerprint(peer.publicKeyFingerprint) else {
+            appendLog("Cannot trust peer without an advertised fingerprint")
+            return
+        }
+        let pinned = PairingService.PinnedPeer(
+            publicKeyFingerprint: peer.publicKeyFingerprint,
+            displayName: peer.name
+        )
+        pairingService.pinPeer(pinned)
+        pinnedPeers = pairingService.loadPinnedPeers()
+        appendLog("Trusted dev peer \(peer.name) (\(shortFingerprint(peer.publicKeyFingerprint)))")
+    }
+
+    func untrust(peer: MdnsPeer) {
+        guard isUsableFingerprint(peer.publicKeyFingerprint) else { return }
+        pairingService.unpinPeer(fingerprint: peer.publicKeyFingerprint)
+        pinnedPeers = pairingService.loadPinnedPeers()
+        appendLog("Forgot dev peer \(peer.name) (\(shortFingerprint(peer.publicKeyFingerprint)))")
     }
 
     func moveRemoteGroup(dx: Int, dy: Int, snap: Bool) {
@@ -353,6 +394,28 @@ final class BarelyRealStore: ObservableObject {
         lastSuggestedPeerHost = host
         appendLog("Discovered Windows peer at \(host)")
         onSuggestedPeerHost?(host)
+    }
+
+    private func loadIdentityAndTrust() {
+        do {
+            let identity = try deviceIdentity.loadOrGenerate()
+            localFingerprint = identity.publicKeyFingerprint
+        } catch {
+            localFingerprint = "unavailable"
+            appendLog("Device identity unavailable: \(error)")
+        }
+        pinnedPeers = pairingService.loadPinnedPeers()
+    }
+
+    private func isUsableFingerprint(_ fingerprint: String) -> Bool {
+        let trimmed = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "dev" && trimmed != "unavailable"
+    }
+
+    private func shortFingerprint(_ fingerprint: String) -> String {
+        let trimmed = fingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 12 else { return trimmed.isEmpty ? "none" : trimmed }
+        return "\(trimmed.prefix(6))...\(trimmed.suffix(6))"
     }
 
     private func applyRemoteLayout(_ message: LayoutSyncMessage) {

@@ -112,10 +112,19 @@ public sealed class DeviceIdentity
 /// `%LocalAppData%\BarelyReal\pinned-peers.dat`.
 public sealed class PinnedPeerStore
 {
-    private static string Directory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BarelyReal");
+    private readonly string _directory;
 
-    private static string FilePath => Path.Combine(Directory, "pinned-peers.dat");
+    public PinnedPeerStore()
+        : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BarelyReal"))
+    {
+    }
+
+    public PinnedPeerStore(string directory)
+    {
+        _directory = directory;
+    }
+
+    private string FilePath => Path.Combine(_directory, "pinned-peers.dat");
 
     public IReadOnlyList<PairingService.PinnedPeer> Load()
     {
@@ -138,7 +147,7 @@ public sealed class PinnedPeerStore
     {
         try
         {
-            System.IO.Directory.CreateDirectory(Directory);
+            System.IO.Directory.CreateDirectory(_directory);
             var stored = peers.Select(p => new StoredPeer { Fp = p.PublicKeyFingerprint, Name = p.DisplayName }).ToList();
             var plain = JsonSerializer.SerializeToUtf8Bytes(stored);
             var encrypted = ProtectedData.Protect(plain, null, DataProtectionScope.CurrentUser);

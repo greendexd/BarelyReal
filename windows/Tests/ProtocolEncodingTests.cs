@@ -289,6 +289,32 @@ internal static class ProtocolEncodingTests
             Expect.Equal(PairingService.Sas(new byte[] { 0x2A, 0x00, 0x00, 0x00 }), "000042");
         });
 
+        TestRunner.Run("pairingDevPinIsDeterministicForEitherOrder", () =>
+        {
+            var pin = PairingService.DevPairingPin("local-fingerprint", "peer-fingerprint");
+            Expect.Equal(pin, "736400");
+            Expect.Equal(pin.Length, 6);
+            Expect.True(pin.All(char.IsDigit), "dev PIN should contain only digits");
+            Expect.Equal(pin, PairingService.DevPairingPin("peer-fingerprint", "local-fingerprint"));
+        });
+
+        TestRunner.Run("pairingPinnedPeerStoreRoundTrips", () =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), $"BarelyRealPinnedPeers-{Guid.NewGuid()}");
+            try
+            {
+                var service = new PairingService(new PinnedPeerStore(dir));
+                service.PinPeer(new PairingService.PinnedPeer("peer-fingerprint", "Peer"));
+                Expect.True(service.IsPeerPinned("peer-fingerprint"), "peer should be pinned");
+                service.UnpinPeer("peer-fingerprint");
+                Expect.True(!service.IsPeerPinned("peer-fingerprint"), "peer should be unpinned");
+            }
+            finally
+            {
+                try { Directory.Delete(dir, recursive: true); } catch { }
+            }
+        });
+
         TestRunner.Run("pairingPinLockoutAfterFiveWrongAttempts", () =>
         {
             var service = new PairingService(maxWrongAttempts: 5, lockoutSeconds: 60);
