@@ -19,6 +19,13 @@ public final class PairingService {
         case lockedOut(retryAfterSeconds: Int)
     }
 
+    public enum PeerTrustState: Equatable {
+        case unknownKey
+        case unpaired
+        case trusted
+        case keyChanged(expectedFingerprint: String)
+    }
+
     private let pinnedPeerStore: PinnedPeerStore
     private let maxWrongAttempts: Int
     private let lockoutSeconds: Int
@@ -82,6 +89,26 @@ public final class PairingService {
 
     public func loadPinnedPeers() -> [PinnedPeer] {
         pinnedPeerStore.load()
+    }
+
+    public func trustState(publicKeyFingerprint: String, displayName: String) -> PeerTrustState {
+        let fingerprint = publicKeyFingerprint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !fingerprint.isEmpty, fingerprint != "dev" else {
+            return .unknownKey
+        }
+
+        let peers = loadPinnedPeers()
+        if peers.contains(where: { $0.publicKeyFingerprint == fingerprint }) {
+            return .trusted
+        }
+
+        let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedName.isEmpty,
+           let existing = peers.first(where: { $0.displayName.caseInsensitiveCompare(normalizedName) == .orderedSame }) {
+            return .keyChanged(expectedFingerprint: existing.publicKeyFingerprint)
+        }
+
+        return .unpaired
     }
 
     public func pinPeer(_ peer: PinnedPeer) {

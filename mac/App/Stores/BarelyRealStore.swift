@@ -75,6 +75,10 @@ final class BarelyRealStore: ObservableObject {
     func start(settings: ConnectionSettings) {
         lastError = nil
 
+        guard validatePeerTrust(settings: settings) else {
+            return
+        }
+
         if !accessibilityGranted {
             appendLog("Accessibility permission is missing; KM capture may not start.")
         }
@@ -117,6 +121,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardTest(settings: ConnectionSettings) {
+        guard validatePeerTrust(settings: settings) else { return }
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -126,6 +131,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardImageTest(settings: ConnectionSettings) {
+        guard validatePeerTrust(settings: settings) else { return }
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -135,6 +141,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardFileTest(settings: ConnectionSettings) {
+        guard validatePeerTrust(settings: settings) else { return }
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -316,8 +323,11 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func isTrusted(peer: MdnsPeer) -> Bool {
-        guard isUsableFingerprint(peer.publicKeyFingerprint) else { return false }
-        return pinnedPeers.contains { $0.publicKeyFingerprint == peer.publicKeyFingerprint }
+        trustState(peer: peer) == .trusted
+    }
+
+    func trustState(peer: MdnsPeer) -> PairingService.PeerTrustState {
+        pairingService.trustState(publicKeyFingerprint: peer.publicKeyFingerprint, displayName: peer.name)
     }
 
     func devPairingPin(for peer: MdnsPeer) -> String? {
@@ -342,13 +352,26 @@ final class BarelyRealStore: ObservableObject {
         pairingService.pinPeer(pinned)
         pinnedPeers = pairingService.loadPinnedPeers()
         appendLog("Trusted dev peer \(peer.name) (\(shortFingerprint(peer.publicKeyFingerprint)))")
+        if let host = peer.bestHost {
+            lastSuggestedPeerHost = host
+            onSuggestedPeerHost?(host)
+        }
     }
 
     func untrust(peer: MdnsPeer) {
-        guard isUsableFingerprint(peer.publicKeyFingerprint) else { return }
-        pairingService.unpinPeer(fingerprint: peer.publicKeyFingerprint)
+        let removedFingerprint: String
+        switch trustState(peer: peer) {
+        case .trusted:
+            guard isUsableFingerprint(peer.publicKeyFingerprint) else { return }
+            removedFingerprint = peer.publicKeyFingerprint
+        case .keyChanged(let expectedFingerprint):
+            removedFingerprint = expectedFingerprint
+        case .unknownKey, .unpaired:
+            return
+        }
+        pairingService.unpinPeer(fingerprint: removedFingerprint)
         pinnedPeers = pairingService.loadPinnedPeers()
-        appendLog("Forgot dev peer \(peer.name) (\(shortFingerprint(peer.publicKeyFingerprint)))")
+        appendLog("Forgot dev peer \(peer.name) (\(shortFingerprint(removedFingerprint)))")
     }
 
     func moveRemoteGroup(dx: Int, dy: Int, snap: Bool) {
@@ -387,13 +410,57 @@ final class BarelyRealStore: ObservableObject {
         }
         discoveredPeers = remotePeers
 
-        guard let host = remotePeers.first(where: { !$0.stale })?.bestHost,
+        guard let peer = remotePeers.first(where: { !$0.stale }),
+              let host = peer.bestHost,
               host != lastSuggestedPeerHost
         else { return }
 
         lastSuggestedPeerHost = host
+        guard trustState(peer: peer) == .trusted else {
+            appendLog("Discovered \(peer.name) at \(host); trust peer before auto-fill/start.")
+            return
+        }
+
         appendLog("Discovered Windows peer at \(host)")
         onSuggestedPeerHost?(host)
+    }
+
+    private func validatePeerTrust(settings: ConnectionSettings) -> Bool {
+        let peerHost = settings.peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !peerHost.isEmpty else { return true }
+
+        guard let peer = discoveredPeer(matchingHost: peerHost) else {
+            appendLog("Trust check: no discovered fingerprint for \(peerHost); manual-IP dev fallback allowed.")
+            return true
+        }
+
+        switch trustState(peer: peer) {
+        case .trusted:
+            return true
+        case .unknownKey:
+            appendLog("Trust check: \(peer.name) did not advertise a fingerprint; dev fallback allowed.")
+            return true
+        case .unpaired:
+            lastError = "Trust required: compare the 6-digit PIN on both machines, then Trust peer in Layout."
+            appendLog(lastError ?? "Trust required")
+            return false
+        case .keyChanged(let expectedFingerprint):
+            lastError = "Peer key changed for \(peer.name). Expected \(shortFingerprint(expectedFingerprint)), saw \(shortFingerprint(peer.publicKeyFingerprint))."
+            appendLog(lastError ?? "Peer key changed")
+            return false
+        }
+    }
+
+    private func discoveredPeer(matchingHost host: String) -> MdnsPeer? {
+        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return nil }
+
+        return discoveredPeers.first { peer in
+            guard !peer.stale else { return false }
+            let candidates = ([peer.bestHost, peer.hostName] + peer.addresses.map(Optional.some))
+                .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            return candidates.contains(normalized)
+        }
     }
 
     private func loadIdentityAndTrust() {

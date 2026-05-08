@@ -148,7 +148,10 @@ public final class PinnedPeerStore {
     }
 
     public func add(_ peer: PairingService.PinnedPeer) {
-        var current = load().filter { $0.publicKeyFingerprint != peer.publicKeyFingerprint }
+        var current = load().filter {
+            $0.publicKeyFingerprint != peer.publicKeyFingerprint
+                && $0.displayName.caseInsensitiveCompare(peer.displayName) != .orderedSame
+        }
         current.append(peer)
         save(current)
     }

@@ -10,6 +10,14 @@ public sealed class PairingService
 {
     public sealed record PinnedPeer(string PublicKeyFingerprint, string DisplayName);
 
+    public enum TrustState
+    {
+        UnknownKey,
+        Unpaired,
+        Trusted,
+        KeyChanged
+    }
+
     private readonly PinnedPeerStore _pinnedPeerStore;
     private readonly int _maxWrongAttempts;
     private readonly int _lockoutSeconds;
@@ -122,13 +130,60 @@ public sealed class PairingService
             peer.PublicKeyFingerprint.Equals(fingerprint.Trim(), StringComparison.Ordinal));
     }
 
+    public TrustState EvaluateTrust(string displayName, string fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint) || fingerprint.Trim().Equals("dev", StringComparison.OrdinalIgnoreCase))
+            return TrustState.UnknownKey;
+
+        var trimmedFingerprint = fingerprint.Trim();
+        var pinnedPeers = LoadPinnedPeers();
+        if (pinnedPeers.Any(peer => peer.PublicKeyFingerprint.Equals(trimmedFingerprint, StringComparison.Ordinal)))
+            return TrustState.Trusted;
+
+        var normalizedDisplayName = NormalizeDisplayName(displayName);
+        if (!string.IsNullOrWhiteSpace(normalizedDisplayName)
+            && pinnedPeers.Any(peer =>
+                !peer.PublicKeyFingerprint.Equals(trimmedFingerprint, StringComparison.Ordinal)
+                && NormalizeDisplayName(peer.DisplayName).Equals(normalizedDisplayName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return TrustState.KeyChanged;
+        }
+
+        return TrustState.Unpaired;
+    }
+
+    public string? ExpectedFingerprintForDisplayName(string displayName)
+    {
+        var normalizedDisplayName = NormalizeDisplayName(displayName);
+        if (string.IsNullOrWhiteSpace(normalizedDisplayName))
+            return null;
+
+        return LoadPinnedPeers()
+            .FirstOrDefault(peer => NormalizeDisplayName(peer.DisplayName).Equals(normalizedDisplayName, StringComparison.OrdinalIgnoreCase))
+            ?.PublicKeyFingerprint;
+    }
+
     public void PinPeer(PinnedPeer peer)
     {
-        _pinnedPeerStore.Add(peer);
+        var normalizedDisplayName = NormalizeDisplayName(peer.DisplayName);
+        var current = LoadPinnedPeers()
+            .Where(existing => !existing.PublicKeyFingerprint.Equals(peer.PublicKeyFingerprint, StringComparison.Ordinal))
+            .Where(existing => string.IsNullOrWhiteSpace(normalizedDisplayName)
+                || !NormalizeDisplayName(existing.DisplayName).Equals(normalizedDisplayName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        current.Add(peer);
+        _pinnedPeerStore.Save(current);
     }
 
     public void UnpinPeer(string fingerprint)
     {
         _pinnedPeerStore.Remove(fingerprint);
+    }
+
+    private static string NormalizeDisplayName(string displayName)
+    {
+        var trimmed = displayName.Trim();
+        var atIndex = trimmed.LastIndexOf(" at ", StringComparison.OrdinalIgnoreCase);
+        return atIndex > 0 ? trimmed[..atIndex].Trim() : trimmed;
     }
 }

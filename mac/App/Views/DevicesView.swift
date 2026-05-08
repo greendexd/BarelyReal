@@ -180,6 +180,7 @@ struct DevicesView: View {
                 }
 
                 HStack(spacing: 10) {
+                    let trustState = store.trustState(peer: peer)
                     Button {
                         store.trust(peer: peer)
                     } label: {
@@ -193,7 +194,7 @@ struct DevicesView: View {
                     } label: {
                         Label("Forget", systemImage: "trash")
                     }
-                    .disabled(!store.isTrusted(peer: peer))
+                    .disabled(!(trustState == .trusted || isKeyChanged(trustState)))
 
                     Spacer()
                 }
@@ -259,13 +260,35 @@ struct DevicesView: View {
 
     @ViewBuilder
     private func trustBadge(for peer: MdnsPeer) -> some View {
-        let trusted = store.isTrusted(peer: peer)
-        Text(trusted ? "Trusted" : "Untrusted")
+        let state = store.trustState(peer: peer)
+        Text(trustLabel(state))
             .font(.caption.weight(.semibold))
-            .foregroundStyle(trusted ? VisionPalette.mint : VisionPalette.amber)
+            .foregroundStyle(trustTint(state))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background((trusted ? VisionPalette.mint : VisionPalette.amber).opacity(0.12), in: Capsule())
+            .background(trustTint(state).opacity(0.12), in: Capsule())
+    }
+
+    private func trustLabel(_ state: PairingService.PeerTrustState) -> String {
+        switch state {
+        case .unknownKey: "No key"
+        case .unpaired: "Unpaired"
+        case .trusted: "Trusted"
+        case .keyChanged: "Key changed"
+        }
+    }
+
+    private func trustTint(_ state: PairingService.PeerTrustState) -> Color {
+        switch state {
+        case .trusted: VisionPalette.mint
+        case .unknownKey, .unpaired: VisionPalette.amber
+        case .keyChanged: VisionPalette.red
+        }
+    }
+
+    private func isKeyChanged(_ state: PairingService.PeerTrustState) -> Bool {
+        if case .keyChanged = state { return true }
+        return false
     }
 
     private func fingerprintRow(title: String, value: String) -> some View {

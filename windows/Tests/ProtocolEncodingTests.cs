@@ -315,6 +315,37 @@ internal static class ProtocolEncodingTests
             }
         });
 
+        TestRunner.Run("pairingTrustStateUnknownWithoutFingerprint", () =>
+        {
+            var service = new PairingService();
+            Expect.Equal(service.EvaluateTrust("MacBook", ""), PairingService.TrustState.UnknownKey);
+            Expect.Equal(service.EvaluateTrust("MacBook", "dev"), PairingService.TrustState.UnknownKey);
+        });
+
+        TestRunner.Run("pairingTrustStateTrustedUnpairedAndKeyChanged", () =>
+        {
+            var dir = Path.Combine(Path.GetTempPath(), $"BarelyRealPinnedPeers-{Guid.NewGuid()}");
+            try
+            {
+                var service = new PairingService(new PinnedPeerStore(dir));
+                service.PinPeer(new PairingService.PinnedPeer("old-fingerprint", "MacBook at 192.168.0.10"));
+
+                Expect.Equal(service.EvaluateTrust("MacBook", "old-fingerprint"), PairingService.TrustState.Trusted);
+                Expect.Equal(service.EvaluateTrust("MacBook", "new-fingerprint"), PairingService.TrustState.KeyChanged);
+                Expect.Equal(service.ExpectedFingerprintForDisplayName("MacBook"), "old-fingerprint");
+                Expect.Equal(service.EvaluateTrust("Other Mac", "new-fingerprint"), PairingService.TrustState.Unpaired);
+
+                service.PinPeer(new PairingService.PinnedPeer("new-fingerprint", "MacBook"));
+                Expect.Equal(service.EvaluateTrust("MacBook", "new-fingerprint"), PairingService.TrustState.Trusted);
+                Expect.Equal(service.EvaluateTrust("MacBook", "old-fingerprint"), PairingService.TrustState.KeyChanged);
+                Expect.Equal(service.ExpectedFingerprintForDisplayName("MacBook"), "new-fingerprint");
+            }
+            finally
+            {
+                try { Directory.Delete(dir, recursive: true); } catch { }
+            }
+        });
+
         TestRunner.Run("pairingPinLockoutAfterFiveWrongAttempts", () =>
         {
             var service = new PairingService(maxWrongAttempts: 5, lockoutSeconds: 60);

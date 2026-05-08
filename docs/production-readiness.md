@@ -45,6 +45,10 @@ The repository is in early development. Current strengths:
   a durable local fingerprint, both sides derive the same 6-digit dev PIN from
   the two fingerprints, and the user can pin or forget the discovered peer
   fingerprint.
+- Dev trust enforcement now blocks KM/control/clipboard starts for discovered
+  peers until they are trusted, and treats same-name fingerprint changes as a
+  key-mismatch condition. Manual-IP connections with no discovered fingerprint
+  remain allowed as an explicit dev fallback with warning logs.
 - Dev KM works over UDP `24801` with trusted peer IP source filtering and
   optional `BRKM` HMAC-SHA256 datagram authentication via a session-only shared
   secret. Authenticated dev mode also drops duplicate and old KM frames with a

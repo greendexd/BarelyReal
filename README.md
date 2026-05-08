@@ -38,6 +38,7 @@ Implemented so far:
 - Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
 - mDNS/Bonjour discovery on `_barelyreal._tcp.local.` with manual IP fallback.
 - Dev pairing scaffold: both apps advertise durable device fingerprints, show a matching 6-digit dev PIN, and can Trust/Forget the discovered peer fingerprint.
+- Trust enforcement for discovered peers: if mDNS sees a peer fingerprint, KM/control/clipboard start is blocked until the peer is trusted; changed fingerprints are treated as key mismatch. Manual IP without discovery still works as an explicit dev fallback with a warning log.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
 - PIN lockout + pinned-peer identity store scaffold for pairing.
 - Wake-on-LAN packet sender.

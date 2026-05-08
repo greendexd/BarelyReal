@@ -165,6 +165,29 @@ enum ProtocolEncodingTests {
             try expectEqual(PairingService.devPairingPin(localFingerprint: "", peerFingerprint: "peer-fingerprint"), nil)
         }
 
+        r.run("pairingTrustStateDetectsUnpairedTrustedAndChangedKey") {
+            let service = PairingService(
+                pinnedPeerStore: PinnedPeerStore(
+                    applicationSupportSubdir: "BarelyRealTests-\(UUID().uuidString)",
+                    filename: "pinned-peers.json"
+                )
+            )
+
+            try expectEqual(service.trustState(publicKeyFingerprint: "", displayName: "Windows"), .unknownKey)
+            try expectEqual(service.trustState(publicKeyFingerprint: "peer-a", displayName: "Windows"), .unpaired)
+
+            service.pinPeer(.init(publicKeyFingerprint: "peer-a", displayName: "Windows"))
+            try expectEqual(service.trustState(publicKeyFingerprint: "peer-a", displayName: "Windows"), .trusted)
+            try expectEqual(
+                service.trustState(publicKeyFingerprint: "peer-b", displayName: "Windows"),
+                .keyChanged(expectedFingerprint: "peer-a")
+            )
+
+            service.pinPeer(.init(publicKeyFingerprint: "peer-b", displayName: "Windows"))
+            try expectEqual(service.trustState(publicKeyFingerprint: "peer-a", displayName: "Windows"), .keyChanged(expectedFingerprint: "peer-b"))
+            try expectEqual(service.trustState(publicKeyFingerprint: "peer-b", displayName: "Windows"), .trusted)
+        }
+
         r.run("pairingPinLockoutAfterFiveWrongAttempts") {
             let service = PairingService(maxWrongAttempts: 5, lockoutSeconds: 60)
             for _ in 0..<4 {
