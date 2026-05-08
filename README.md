@@ -36,6 +36,7 @@ Implemented so far:
 - Mac -> Windows and Windows -> Mac KM dev paths over UDP with edge transition, trusted-peer source filtering, optional HMAC authentication, and replay-window drops.
 - Text, PNG, and file clipboard sync over TCP port `24802`.
 - Dev control channel on TCP port `24800` for `Hello`, `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
+- mDNS/Bonjour discovery on `_barelyreal._tcp.local.` with manual IP fallback.
 - Heartbeat/link-loss detection with optional lock-on-disconnect.
 - PIN lockout + pinned-peer identity store scaffold for pairing.
 - Wake-on-LAN packet sender.
@@ -69,8 +70,8 @@ still uses clear TCP dev mode. TLS/PIN security is the next hardening step.
    open /Applications/BarelyReal.app
    ```
 
-4. Enter the Windows Wi-Fi IP in the Mac app. Both apps exchange all local screens on TCP `24800`.
-   The Devices page shows every monitor in one virtual layout.
+4. Wait for discovery to find the peer, or enter the peer Wi-Fi IP manually. Both apps exchange
+   all local screens on TCP `24800`. The Devices page shows every monitor in one virtual layout.
 
 5. Optional but recommended: set the same KM shared secret in Settings on both machines before
    starting KM. This is a temporary dev-mode HMAC key until PIN pairing lands.

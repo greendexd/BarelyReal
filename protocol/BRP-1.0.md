@@ -27,6 +27,7 @@ TXT records:
 - `name=<device-name>` — UTF-8, max 63 bytes.
 - `os=mac|win`
 - `ver=<semver>` — protocol version.
+- `peer_id=mac|windows` — current single-pair peer role identifier.
 - `pk=<base64-sha256>` — fingerprint of device public key (32 bytes → base64 raw).
 
 ## Pairing (TOFU + 6-digit PIN)

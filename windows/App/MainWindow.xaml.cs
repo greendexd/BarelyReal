@@ -17,13 +17,18 @@ public partial class MainWindow : Window
     private readonly DevReceiverService _receiver = new();
     private readonly DevSenderService _sender = new();
     private readonly DevControlSession _control = new();
+    private readonly MdnsAdvertiser _mdnsAdvertiser = new();
+    private readonly MdnsBrowser _mdnsBrowser = new();
     private const string LocalPeerId = "windows";
     private const string RemotePeerId = "mac";
+    private const string DefaultMacHost = "192.168.0.101";
     private List<DisplayInfo> _localDisplays = new();
     private List<DisplayInfo> _remoteDisplays = new();
     private BarelyReal.Core.Layout.Layout _virtualLayout = new();
     private bool _remoteScreensStale = true;
     private bool _uiReady;
+    private bool _suppressMacHostChanged;
+    private string? _autoFilledMacHost;
 
     private bool IsSendMode => ModeSendRadio?.IsChecked == true;
 
@@ -39,11 +44,14 @@ public partial class MainWindow : Window
         _control.LogLine += AppendLog;
         _control.ScreenAnnounced += announcement => Dispatcher.BeginInvoke(() => ApplyRemoteAnnouncement(announcement));
         _control.LayoutSynced += layout => Dispatcher.BeginInvoke(() => ApplyRemoteLayout(layout));
+        _mdnsBrowser.OnChange += peers => Dispatcher.BeginInvoke(() => ApplyDiscoveredPeers(peers));
 
         KmPortBox.TextChanged += CommandInput_Changed;
         ClipboardPortBox.TextChanged += CommandInput_Changed;
         ClipboardPeerBox.TextChanged += CommandInput_Changed;
+        ClipboardPeerBox.TextChanged += MacHostBox_TextChanged;
         ControlPortBox.TextChanged += CommandInput_Changed;
+        SendMacHostBox.TextChanged += MacHostBox_TextChanged;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -60,6 +68,7 @@ public partial class MainWindow : Window
         UpdateMacCommand();
         UpdateStatus();
         WireLayoutDesigner();
+        StartDiscovery();
         StartReceiver();
     }
 
@@ -81,6 +90,8 @@ public partial class MainWindow : Window
         _receiver.Dispose();
         _sender.Dispose();
         _control.Dispose();
+        _mdnsBrowser.Dispose();
+        _mdnsAdvertiser.Dispose();
     }
 
     // MARK: - Navigation
@@ -278,7 +289,23 @@ public partial class MainWindow : Window
 
         if (CommandStatusText is not null)
             CommandStatusText.Text = string.Empty;
+        if (ReferenceEquals(sender, ControlPortBox))
+            StartDiscovery();
         UpdateMacCommand();
+    }
+
+    private void MacHostBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (!_uiReady || _suppressMacHostChanged)
+            return;
+
+        var text = sender switch
+        {
+            TextBox textBox => textBox.Text.Trim(),
+            _ => string.Empty
+        };
+        if (!string.Equals(text, _autoFilledMacHost, StringComparison.OrdinalIgnoreCase))
+            _autoFilledMacHost = null;
     }
 
     private void StartReceiver()
@@ -335,6 +362,103 @@ public partial class MainWindow : Window
         ReconcileLayout();
         _control.Start(controlPort, peerHost, controlPort);
         SendControlSnapshot();
+    }
+
+    private void StartDiscovery()
+    {
+        if (!ushort.TryParse(ControlPortBox.Text.Trim(), out var controlPort))
+            controlPort = MdnsAdvertiser.DefaultControlPort;
+
+        try
+        {
+            _mdnsAdvertiser.Start(new MdnsAdvertisement(
+                Environment.MachineName,
+                controlPort,
+                "windows",
+                "0.1.0",
+                LocalPeerId,
+                "dev"));
+            _mdnsBrowser.Start();
+            if (DiscoveryStatusText is not null)
+                DiscoveryStatusText.Text = $"Discovery advertising on _barelyreal._tcp.local:{controlPort}; searching for Mac.";
+        }
+        catch (Exception ex)
+        {
+            if (DiscoveryStatusText is not null)
+                DiscoveryStatusText.Text = $"Discovery unavailable: {ex.Message}";
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery start failed: {ex.Message}");
+        }
+    }
+
+    private void ApplyDiscoveredPeers(IReadOnlyList<DiscoveredPeer> peers)
+    {
+        var mac = peers.FirstOrDefault(IsUsableMacPeer);
+        if (mac is null)
+        {
+            if (DiscoveryStatusText is not null)
+                DiscoveryStatusText.Text = peers.Count == 0
+                    ? "Discovery active; no Mac peer found yet."
+                    : $"Discovery active; {peers.Count} peer(s) found, no fresh Mac peer.";
+            return;
+        }
+
+        var host = BestHost(mac);
+        if (string.IsNullOrWhiteSpace(host))
+            return;
+
+        var label = $"{mac.Name} at {host}:{mac.Port}";
+        if (DiscoveryStatusText is not null)
+            DiscoveryStatusText.Text = $"Discovered Mac: {label}";
+
+        if (!CanAutoFillMacHost())
+            return;
+
+        _suppressMacHostChanged = true;
+        try
+        {
+            ClipboardPeerBox.Text = host;
+            SendMacHostBox.Text = host;
+            _autoFilledMacHost = host;
+        }
+        finally
+        {
+            _suppressMacHostChanged = false;
+        }
+
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery filled Mac IP: {label}");
+    }
+
+    private static bool IsUsableMacPeer(DiscoveredPeer peer)
+    {
+        if (peer.Stale)
+            return false;
+
+        return peer.Os.Equals("mac", StringComparison.OrdinalIgnoreCase)
+            || peer.Os.Equals("macos", StringComparison.OrdinalIgnoreCase)
+            || peer.PeerId.Equals(RemotePeerId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BestHost(DiscoveredPeer peer)
+    {
+        var address = peer.Addresses
+            .Where(static address => address.AddressFamily == AddressFamily.InterNetwork)
+            .Select(static address => address.ToString())
+            .FirstOrDefault();
+
+        return address ?? peer.Host;
+    }
+
+    private bool CanAutoFillMacHost()
+    {
+        return CanAutoFillMacHost(ClipboardPeerBox.Text) && CanAutoFillMacHost(SendMacHostBox.Text);
+    }
+
+    private bool CanAutoFillMacHost(string text)
+    {
+        var trimmed = text.Trim();
+        return string.IsNullOrWhiteSpace(trimmed)
+            || trimmed.Equals(DefaultMacHost, StringComparison.OrdinalIgnoreCase)
+            || (_autoFilledMacHost is not null && trimmed.Equals(_autoFilledMacHost, StringComparison.OrdinalIgnoreCase));
     }
 
     private void SendControlSnapshot()

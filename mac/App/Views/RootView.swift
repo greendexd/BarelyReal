@@ -80,6 +80,15 @@ struct RootView: View {
         .onAppear {
             // Sync persisted toggle into the receiver session.
             store.setLockOnDisconnect(lockOnDisconnect)
+            store.onSuggestedPeerHost = { host in
+                let current = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
+                if current.isEmpty || current == "192.168.0.102" {
+                    peerHost = host
+                }
+            }
+        }
+        .onDisappear {
+            store.onSuggestedPeerHost = nil
         }
     }
 

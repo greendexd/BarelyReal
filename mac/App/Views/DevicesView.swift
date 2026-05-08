@@ -1,3 +1,4 @@
+import BarelyRealCore
 import SwiftUI
 
 struct DevicesView: View {
@@ -142,6 +143,10 @@ struct DevicesView: View {
                     value: $peerHost
                 )
 
+                if !store.discoveredPeers.isEmpty {
+                    discoveredPeersList
+                }
+
                 HStack(alignment: .center, spacing: 12) {
                     Text("Screens")
                         .frame(width: 110, alignment: .leading)
@@ -166,6 +171,50 @@ struct DevicesView: View {
         )
     }
 
+    private var discoveredPeersList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Discovered on LAN")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            ForEach(store.discoveredPeers) { peer in
+                HStack(spacing: 10) {
+                    Image(systemName: peer.stale ? "wifi.exclamationmark" : "network")
+                        .foregroundStyle(peer.stale ? .orange : .green)
+                        .frame(width: 18)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(peer.name)
+                            .font(.callout.weight(.medium))
+                        Text(discoveredPeerSubtitle(peer))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Button("Use") {
+                        if let host = peer.bestHost {
+                            peerHost = host
+                        }
+                    }
+                    .controlSize(.small)
+                    .disabled(peer.bestHost == nil)
+                }
+                .padding(10)
+                .background(Color(nsColor: .separatorColor).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+        }
+    }
+
+    private func discoveredPeerSubtitle(_ peer: MdnsPeer) -> String {
+        let host = peer.bestHost ?? peer.hostName ?? "unresolved"
+        let state = peer.stale ? "last seen" : "available"
+        return "\(peer.os) \(peer.version) · \(host):\(peer.port) · \(state)"
+    }
+
     private func editableRow(title: String, placeholder: String, value: Binding<String>) -> some View {
         HStack(alignment: .center, spacing: 12) {
             Text(title)
@@ -181,7 +230,7 @@ struct DevicesView: View {
             Label("Coming next", systemImage: "sparkles")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("• mDNS auto-discovery\n• PIN-based pairing with key pinning\n• More than one remote peer")
+            Text("• PIN-based pairing with key pinning\n• More than one remote peer")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

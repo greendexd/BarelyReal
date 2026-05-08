@@ -479,5 +479,21 @@ enum ProtocolEncodingTests {
             try expect(guarder.accepts(KmFrame(seq: 11, timestampUs: 0, type: .mouseScroll)), "out-of-order seq 11 should pass once")
             try expect(!guarder.accepts(KmFrame(seq: 11, timestampUs: 0, type: .mouseScroll)), "duplicate out-of-order seq 11 should fail")
         }
+
+        r.run("mdnsTxtRecordRoundTrip") {
+            let data = MdnsRecord.txtData(
+                name: "Windows PC",
+                os: "windows",
+                version: "0.1.0",
+                peerId: "windows",
+                publicKeyFingerprint: "dev"
+            )
+            let decoded = MdnsRecord.parseTXT(data)
+            try expectEqual(decoded["name"], "Windows PC")
+            try expectEqual(decoded["os"], "windows")
+            try expectEqual(decoded["ver"], "0.1.0")
+            try expectEqual(decoded["peer_id"], "windows")
+            try expectEqual(decoded["pk"], "dev")
+        }
     }
 }

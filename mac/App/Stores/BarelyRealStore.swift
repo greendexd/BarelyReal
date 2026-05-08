@@ -31,8 +31,10 @@ final class BarelyRealStore: ObservableObject {
     @Published private(set) var virtualLayout = Layout(screens: [])
     @Published private(set) var controlRunning = false
     @Published private(set) var remoteScreensStale = true
+    @Published private(set) var discoveredPeers: [MdnsPeer] = []
     @Published var permissionRefreshToken = UUID()
     @Published var lockOnDisconnect = false
+    var onSuggestedPeerHost: ((String) -> Void)?
 
     let localPeerId = "mac"
     let remotePeerId = "windows"
@@ -43,11 +45,16 @@ final class BarelyRealStore: ObservableObject {
     private var clipboardSession: ClipboardTextSession?
     private var controlSession: DevControlSession?
     private var keepAliveTimer: Timer?
+    private let mdnsAdvertiser = MdnsAdvertiser()
+    private let mdnsBrowser = MdnsBrowser()
+    private var discoveryStarted = false
+    private var lastSuggestedPeerHost: String?
 
     init() {
         refreshDisplays()
         loadLayoutState()
         reconcileLayout()
+        startDiscovery(controlPort: 24_800)
     }
 
     var accessibilityGranted: Bool {
@@ -246,6 +253,7 @@ final class BarelyRealStore: ObservableObject {
     private func startControl(settings: ConnectionSettings) {
         controlSession?.close()
         keepAliveTimer?.invalidate()
+        startDiscovery(controlPort: settings.controlPort)
 
         let session = DevControlSession()
         session.onLog = { [weak self] message in
@@ -271,6 +279,31 @@ final class BarelyRealStore: ObservableObject {
             lastError = "Control start failed: \(error)"
             appendLog(lastError ?? "Control start failed")
         }
+    }
+
+    private func startDiscovery(controlPort: Int) {
+        let deviceName = Host.current().localizedName ?? "Mac"
+        mdnsAdvertiser.start(
+            deviceName: deviceName,
+            port: UInt16(clamping: controlPort),
+            os: "macOS",
+            version: "0.1.0",
+            peerId: localPeerId,
+            publicKeyFingerprint: "dev",
+            onLog: { [weak self] message in
+                Task { @MainActor in self?.appendLog(message) }
+            }
+        )
+
+        guard !discoveryStarted else { return }
+        discoveryStarted = true
+        mdnsBrowser.onLog = { [weak self] message in
+            Task { @MainActor in self?.appendLog(message) }
+        }
+        mdnsBrowser.onChange = { [weak self] peers in
+            Task { @MainActor in self?.applyDiscoveredPeers(peers) }
+        }
+        mdnsBrowser.start()
     }
 
     func refreshDisplays() {
@@ -304,6 +337,22 @@ final class BarelyRealStore: ObservableObject {
         reconcileLayout()
         saveLayoutState()
         appendLog("Peer screens updated: \(remoteDisplays.count)")
+    }
+
+    private func applyDiscoveredPeers(_ peers: [MdnsPeer]) {
+        let remotePeers = peers.filter { peer in
+            peer.peerId != localPeerId
+                && (peer.peerId == remotePeerId || peer.os.localizedCaseInsensitiveContains("win"))
+        }
+        discoveredPeers = remotePeers
+
+        guard let host = remotePeers.first(where: { !$0.stale })?.bestHost,
+              host != lastSuggestedPeerHost
+        else { return }
+
+        lastSuggestedPeerHost = host
+        appendLog("Discovered Windows peer at \(host)")
+        onSuggestedPeerHost?(host)
     }
 
     private func applyRemoteLayout(_ message: LayoutSyncMessage) {

@@ -39,12 +39,14 @@ The repository is in early development. Current strengths:
   clipboard sync, smoke tools, firewall helper, and verification script.
 - Dev control/layout sync works over clear TCP `24800` for `Hello`,
   `ScreenAnnounce`, `LayoutSync`, and `KeepAlive`.
+- Dev mDNS/Bonjour publish/browse works on `_barelyreal._tcp.local.` and fills
+  the existing peer IP fields while preserving manual fallback.
 - Dev KM works over UDP `24801` with trusted peer IP source filtering and
   optional `BRKM` HMAC-SHA256 datagram authentication via a session-only shared
   secret. Authenticated dev mode also drops duplicate and old KM frames with a
   1024-frame replay window.
 - Dev clipboard sync uses TCP `24802` for text, PNG images, and file bundles.
-- Pairing, identity, TLS, mDNS, file transfer, and release packaging have
+- Pairing, identity, TLS, file transfer, and release packaging have
   scaffolding or docs, but not enough enforced behavior for public release.
 
 Non-negotiable gaps before release:

@@ -451,6 +451,12 @@
                                         <TextBox x:Name="ClipboardPeerBox" Text="192.168.0.101" Margin="0,4,0,0" />
                                     </StackPanel>
                                 </Grid>
+                                <TextBlock x:Name="DiscoveryStatusText"
+                                           Text="Discovery starting..."
+                                           Foreground="{StaticResource MutedBrush}"
+                                           FontSize="11"
+                                           Margin="0,10,0,0"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 
@@ -685,7 +691,7 @@
                                 <TextBlock Text="ℹ  About" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,8" />
                                 <TextBlock Text="BarelyReal — share keyboard, mouse and clipboard between Mac and Windows over LAN."
                                            Foreground="{StaticResource MutedBrush}" FontSize="12" TextWrapping="Wrap" />
-                                <TextBlock Text="Pairing, TLS and mDNS auto-discovery are coming next."
+                                <TextBlock Text="Pairing and TLS are coming next. mDNS auto-discovery advertises and finds BarelyReal peers on the LAN."
                                            Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
