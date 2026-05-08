@@ -425,6 +425,29 @@ final class BarelyRealStore: ObservableObject {
         clipboardEntries = history.recent()
     }
 
+    func exportDiagnostics() {
+        do {
+            let url = try DiagnosticsBundle.write(.init(
+                kmRunning: kmRunning,
+                clipboardRunning: clipboardRunning,
+                controlRunning: controlRunning,
+                receiverLinkUp: receiverLinkUp,
+                lockOnDisconnect: lockOnDisconnect,
+                localDisplays: localDisplays,
+                remoteDisplays: remoteDisplays,
+                remoteScreensStale: remoteScreensStale,
+                virtualLayout: virtualLayout,
+                logLines: logLines,
+                lastError: lastError
+            ))
+            appendLog("Diagnostics exported: \(url.path)")
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            lastError = "Diagnostics export failed: \(error)"
+            appendLog(lastError ?? "Diagnostics export failed")
+        }
+    }
+
     private func appendLog(_ message: String) {
         let timestamp = Self.timeFormatter.string(from: Date())
         logLines.append("[\(timestamp)] \(message)")

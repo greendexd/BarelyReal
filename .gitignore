@@ -8,6 +8,8 @@
 # Logs and local runtime output
 *.log
 logs/
+mac/artifacts/
+windows/artifacts/
 
 # Archives and generated packages
 *.zip

@@ -9,6 +9,8 @@ struct ActivityView: View {
                 Text("Activity")
                     .font(.title2.weight(.semibold))
                 Spacer()
+                Button("Export Diagnostics", systemImage: "square.and.arrow.up", action: store.exportDiagnostics)
+                    .controlSize(.small)
                 Text("\(store.logLines.count) events")
                     .font(.caption)
                     .foregroundStyle(.secondary)

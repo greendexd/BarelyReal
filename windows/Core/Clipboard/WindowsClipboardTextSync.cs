@@ -320,20 +320,18 @@ public sealed class WindowsClipboardTextSync
         switch (packet.Kind)
         {
             case ClipboardKind.Text:
-                return $"text {Preview(Encoding.UTF8.GetString(packet.Payload))}";
+                return $"text/plain {packet.Payload.Length} bytes hash={packet.Hash[..Math.Min(12, packet.Hash.Length)]}";
             case ClipboardKind.Png:
-                return $"image/png {packet.Payload.Length}";
+                return $"image/png {packet.Payload.Length} bytes hash={packet.Hash[..Math.Min(12, packet.Hash.Length)]}";
             case ClipboardKind.Files:
                 try
                 {
                     var bundle = ClipboardFileBundleCodec.Decode(packet.Payload);
-                    var preview = string.Join(", ", bundle.Files.Take(3).Select(f => f.Name));
-                    var suffix = bundle.Files.Count > 3 ? "…" : string.Empty;
-                    return $"files ({bundle.Files.Count}) [{preview}{suffix}] {packet.Payload.Length} bytes";
+                    return $"files ({bundle.Files.Count}) {packet.Payload.Length} bytes hash={packet.Hash[..Math.Min(12, packet.Hash.Length)]}";
                 }
                 catch
                 {
-                    return $"files {packet.Payload.Length} bytes";
+                    return $"files {packet.Payload.Length} bytes hash={packet.Hash[..Math.Min(12, packet.Hash.Length)]}";
                 }
             default:
                 return $"{KindName(packet.Kind)} {packet.Payload.Length}";
@@ -348,13 +346,6 @@ public sealed class WindowsClipboardTextSync
             ClipboardKind.Files => "files",
             _ => $"kind:{(byte)kind}"
         };
-
-    private static string Preview(string text)
-    {
-        var collapsed = text.Replace("\r", "\\r", StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
-        return collapsed.Length <= 80 ? collapsed : collapsed[..80];
-    }
-
     private enum ClipboardKind : byte
     {
         Text = 1,

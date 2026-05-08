@@ -22,6 +22,8 @@ See:
 - [protocol/BRP-1.0.md](protocol/BRP-1.0.md) — wire-format specification.
 - [docs/architecture.md](docs/architecture.md) — system design.
 - [docs/security.md](docs/security.md) — threat model & pairing.
+- [docs/production-readiness.md](docs/production-readiness.md) — roadmap from dev bridge to shippable product.
+- [docs/release-checklist.md](docs/release-checklist.md) — release gates before sharing builds with users.
 
 ## Status
 
@@ -76,6 +78,25 @@ The old `BarelyRealKmSmoke` CLI remains useful for smoke tests, but the app UI i
 preferred controller.
 
 If capture prints no frames on Mac, grant Accessibility permission to the terminal/Codex app in System Settings.
+
+## Diagnostics
+
+Diagnostics must never include clipboard payloads, typed text, transferred file bytes, private keys, or PIN values.
+
+macOS:
+
+```sh
+./mac/scripts/diagnose-mac.sh
+```
+
+The Mac app also has an **Activity → Export Diagnostics** button that writes a sanitized
+diagnostic report to Downloads.
+
+Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\scripts\export-diagnostics.ps1
+```
 
 ### macOS
 

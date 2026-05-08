@@ -32,17 +32,14 @@ final class ClipboardTextSession {
         var logLabel: String {
             switch kind {
             case .text:
-                let text = String(data: payload, encoding: .utf8) ?? "<invalid utf8>"
-                return "text \(Self.preview(text))"
+                return "text/plain \(payload.count) bytes hash=\(hash.prefix(12))"
             case .imagePNG:
-                return "image/png \(payload.count) bytes"
+                return "image/png \(payload.count) bytes hash=\(hash.prefix(12))"
             case .fileBundle:
                 if let bundle = try? ClipboardFileBundleCodec.decode(payload) {
-                    let names = bundle.files.prefix(3).map(\.name).joined(separator: ", ")
-                    let suffix = bundle.files.count > 3 ? "…" : ""
-                    return "files (\(bundle.files.count)) [\(names)\(suffix)] \(payload.count) bytes"
+                    return "files (\(bundle.files.count)) \(payload.count) bytes hash=\(hash.prefix(12))"
                 }
-                return "files \(payload.count) bytes"
+                return "files \(payload.count) bytes hash=\(hash.prefix(12))"
             }
         }
 
@@ -56,11 +53,6 @@ final class ClipboardTextSession {
 
         static func fileBundle(_ bundle: ClipboardFileBundle) -> ClipboardItem {
             ClipboardItem(kind: .fileBundle, payload: ClipboardFileBundleCodec.encode(bundle))
-        }
-
-        private static func preview(_ text: String) -> String {
-            let collapsed = text.replacingOccurrences(of: "\n", with: "\\n")
-            return String(collapsed.prefix(80))
         }
     }
 
