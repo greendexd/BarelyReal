@@ -334,6 +334,12 @@ public static class UdpKmAuthenticator
     {
         payload = Array.Empty<byte>();
 
+        if (datagram.Length >= sizeof(uint) && !HasMagic(datagram))
+        {
+            failure = "missing BRKM auth envelope";
+            return false;
+        }
+
         if (datagram.Length < HeaderSize + TagSize)
         {
             failure = "truncated envelope";
