@@ -75,9 +75,7 @@ final class BarelyRealStore: ObservableObject {
     func start(settings: ConnectionSettings) {
         lastError = nil
 
-        guard validatePeerTrust(settings: settings) else {
-            return
-        }
+        notePeerTrustState(settings: settings)
 
         if !accessibilityGranted {
             appendLog("Accessibility permission is missing; KM capture may not start.")
@@ -121,7 +119,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardTest(settings: ConnectionSettings) {
-        guard validatePeerTrust(settings: settings) else { return }
+        notePeerTrustState(settings: settings)
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -131,7 +129,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardImageTest(settings: ConnectionSettings) {
-        guard validatePeerTrust(settings: settings) else { return }
+        notePeerTrustState(settings: settings)
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -141,7 +139,7 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func sendClipboardFileTest(settings: ConnectionSettings) {
-        guard validatePeerTrust(settings: settings) else { return }
+        notePeerTrustState(settings: settings)
         if clipboardSession == nil {
             startClipboard(settings: settings)
         }
@@ -416,38 +414,28 @@ final class BarelyRealStore: ObservableObject {
         else { return }
 
         lastSuggestedPeerHost = host
-        guard trustState(peer: peer) == .trusted else {
-            appendLog("Discovered \(peer.name) at \(host); trust peer before auto-fill/start.")
-            return
-        }
-
         appendLog("Discovered Windows peer at \(host)")
         onSuggestedPeerHost?(host)
     }
 
-    private func validatePeerTrust(settings: ConnectionSettings) -> Bool {
+    private func notePeerTrustState(settings: ConnectionSettings) {
         let peerHost = settings.peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !peerHost.isEmpty else { return true }
+        guard !peerHost.isEmpty else { return }
 
         guard let peer = discoveredPeer(matchingHost: peerHost) else {
-            appendLog("Trust check: no discovered fingerprint for \(peerHost); manual-IP dev fallback allowed.")
-            return true
+            appendLog("Trust disabled: no discovered fingerprint for \(peerHost); starting dev connection.")
+            return
         }
 
         switch trustState(peer: peer) {
         case .trusted:
-            return true
+            appendLog("Trust disabled: \(peer.name) is trusted; starting dev connection.")
         case .unknownKey:
-            appendLog("Trust check: \(peer.name) did not advertise a fingerprint; dev fallback allowed.")
-            return true
+            appendLog("Trust disabled: \(peer.name) has no advertised fingerprint; starting dev connection.")
         case .unpaired:
-            lastError = "Trust required: compare the 6-digit PIN on both machines, then Trust peer in Layout."
-            appendLog(lastError ?? "Trust required")
-            return false
+            appendLog("Trust disabled: \(peer.name) is unpaired; starting dev connection anyway.")
         case .keyChanged(let expectedFingerprint):
-            lastError = "Peer key changed for \(peer.name). Expected \(shortFingerprint(expectedFingerprint)), saw \(shortFingerprint(peer.publicKeyFingerprint))."
-            appendLog(lastError ?? "Peer key changed")
-            return false
+            appendLog("Trust disabled: \(peer.name) key changed (expected \(shortFingerprint(expectedFingerprint)), saw \(shortFingerprint(peer.publicKeyFingerprint))); starting dev connection anyway.")
         }
     }
 

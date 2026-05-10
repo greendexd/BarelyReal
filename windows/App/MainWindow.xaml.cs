@@ -263,11 +263,7 @@ public partial class MainWindow : Window
             AppendLog($"[{DateTime.Now:HH:mm:ss}] Mac IP required.");
             return;
         }
-        if (!TryAuthorizePeerStart(host, "sender"))
-        {
-            UpdateStatus();
-            return;
-        }
+        NotePeerTrustState(host, "sender");
         try
         {
             if (!StartControl(host, trustAlreadyChecked: true))
@@ -365,11 +361,7 @@ public partial class MainWindow : Window
         }
 
         var peerHost = ClipboardPeerBox.Text.Trim();
-        if (!TryAuthorizePeerStart(peerHost, "receiver"))
-        {
-            UpdateStatus();
-            return;
-        }
+        NotePeerTrustState(peerHost, "receiver");
         try
         {
             _receiver.Start(kmPort, peerHost, clipboardPort, KmSharedSecret());
@@ -411,8 +403,8 @@ public partial class MainWindow : Window
             AppendLog($"[{DateTime.Now:HH:mm:ss}] Invalid control port.");
             return false;
         }
-        if (!trustAlreadyChecked && !TryAuthorizePeerStart(peerHost, "control"))
-            return false;
+        if (!trustAlreadyChecked)
+            NotePeerTrustState(peerHost, "control");
 
         RefreshDisplays();
         ReconcileLayout();
@@ -470,15 +462,6 @@ public partial class MainWindow : Window
         var label = $"{mac.Name} at {host}:{mac.Port}";
         if (DiscoveryStatusText is not null)
             DiscoveryStatusText.Text = $"Discovered Mac: {label}";
-
-        var trustState = _pairing.EvaluateTrust(PairingDisplayName(mac), mac.PublicKeyFingerprint);
-        if (trustState != PairingService.TrustState.Trusted)
-        {
-            if (DiscoveryStatusText is not null)
-                DiscoveryStatusText.Text = $"Discovered Mac: {label}; trust required.";
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovered Mac at {host}; trust peer before auto-fill/start.");
-            return;
-        }
 
         if (!CanAutoFillMacHost())
             return;
@@ -615,7 +598,7 @@ public partial class MainWindow : Window
                 && (trusted || trustState == PairingService.TrustState.KeyChanged);
     }
 
-    private bool TryAuthorizePeerStart(string peerHost, string action)
+    private void NotePeerTrustState(string peerHost, string action)
     {
         var discovered = FindDiscoveredPeerForHost(peerHost);
         var selected = SelectedPairingPeer();
@@ -633,22 +616,20 @@ public partial class MainWindow : Window
 
         if (trustState == PairingService.TrustState.KeyChanged)
         {
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust refused {action}: {displayName} advertises a different fingerprint ({ShortFingerprint(fingerprint)}). Re-pair before starting.");
-            return false;
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust disabled for {action}: {displayName} key changed ({ShortFingerprint(fingerprint)}); starting dev connection anyway.");
+            return;
         }
 
         if (trustState == PairingService.TrustState.Unpaired && (discovered is not null || selectedMatchesHost))
         {
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust refused {action}: {displayName} is discovered but not trusted yet. Use Trust this peer first.");
-            return false;
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust disabled for {action}: {displayName} is unpaired; starting dev connection anyway.");
+            return;
         }
 
         if (trustState == PairingService.TrustState.UnknownKey)
         {
-            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust warning for {action}: no discovered peer fingerprint for {peerHost}; continuing manual-IP dev fallback. Verify the host before sharing control.");
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Trust disabled for {action}: no discovered peer fingerprint for {peerHost}; starting dev connection.");
         }
-
-        return true;
     }
 
     private DiscoveredPeer? FindDiscoveredPeerForHost(string peerHost)
