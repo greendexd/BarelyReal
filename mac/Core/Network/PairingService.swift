@@ -1,8 +1,9 @@
 import CryptoKit
 import Foundation
 
-/// 6-digit PIN pairing per BRP § Pairing. Derives SAS from the TLS exporter, stores pinned SPKI
-/// hashes in Keychain. TODO(week 1).
+/// 6-digit PIN pairing per BRP § Pairing. Derives SAS from the TLS exporter.
+/// Dev builds keep pinned fingerprints in Application Support; public release storage should
+/// move to platform-protected secret storage.
 public final class PairingService {
     public struct PinnedPeer: Equatable {
         public let publicKeyFingerprint: String   // base64 SHA-256 of SPKI

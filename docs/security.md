@@ -27,7 +27,7 @@ KM events go over UDP and use **ChaCha20-Poly1305 AEAD** with keys derived from 
 
 First connection between two devices:
 
-1. Both sides generate per-device long-lived ed25519 keys at install time, stored in the platform secret store (Keychain / DPAPI). The TLS cert is self-signed and bound to this key.
+1. Both sides generate per-device long-lived keys at install time. Current dev macOS builds store the local identity in Application Support to avoid Keychain prompts; release builds must move this back to platform secret storage (Keychain / DPAPI). The TLS cert is self-signed and bound to this key.
 2. On a new pair, TLS 1.3 ECDHE handshake completes. Both sides extract a 6-digit short authentication string from the TLS exporter (see [BRP-1.0.md](../protocol/BRP-1.0.md) § Pairing).
 3. Initiator's UI displays the 6 digits; the user types them on the responder's UI. Match → both sides pin the SubjectPublicKeyInfo SHA-256 of the peer's certificate.
 4. Future connections to the same peer require an exact pin match. Mismatch is treated as MITM, connection refused, user notified.
@@ -41,10 +41,11 @@ First connection between two devices:
 ### Key storage
 
 Pinned peer SPKI hashes and our own ed25519 private key live in:
-- **macOS**: Keychain, accessible only to the BarelyReal app's signing identity (`kSecAttrAccessibleWhenUnlocked`).
+- **macOS dev build**: Application Support file storage to avoid local Keychain prompts during testing. **Release requirement**: Keychain, accessible only to the BarelyReal app's signing identity (`kSecAttrAccessibleWhenUnlocked`).
 - **Windows**: DPAPI under user scope, file in `%LocalAppData%\BarelyReal\trust.dat`.
 
-Never written to plain-text files, never logged.
+Release secrets must never be written to plain-text files or logged. The current macOS dev identity
+file is a temporary local-testing exception so BarelyReal does not trigger Keychain password prompts.
 
 ### Privilege
 

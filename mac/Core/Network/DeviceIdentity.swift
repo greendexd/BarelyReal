@@ -1,13 +1,12 @@
 import CryptoKit
 import Foundation
-import Security
 
 /// Per-device long-lived identity used by BRP pairing.
 ///
 /// On first run we generate an ed25519 key pair and a derived self-signed certificate placeholder.
-/// The private key is stored in the macOS Keychain (generic password slot, accessible only when
-/// unlocked, not synced to iCloud). The public-key fingerprint (SHA-256) is what gets pinned by
-/// peers during PIN pairing per BRP § Pairing.
+/// Dev builds store the private key in Application Support instead of Keychain so local testing
+/// never shows a system password prompt. Public release builds should move this back to Keychain.
+/// The public-key fingerprint (SHA-256) is what gets pinned by peers during PIN pairing per BRP § Pairing.
 ///
 /// This type is the foundation: it gives us a stable identity across launches. The actual TLS
 /// 1.3 handshake and certificate wrapping live in `TlsSession` (still a stub).
@@ -19,31 +18,35 @@ public final class DeviceIdentity {
     }
 
     public enum IdentityError: Error {
-        case keychainStore(OSStatus)
-        case keychainRead(OSStatus)
+        case fileStore(Error)
+        case fileRead(Error)
         case malformedKeyMaterial
     }
 
-    private static let service = "com.barelyreal.mac"
-    private static let account = "device-identity-v1"
+    private static let applicationSupportSubdir = "BarelyReal"
+    private static let filename = "device-identity.json"
 
     public init() {}
 
-    /// Load existing identity from Keychain or generate a fresh one and persist it.
+    /// Load existing identity from Application Support or generate a fresh one and persist it.
     public func loadOrGenerate() throws -> Identity {
-        if let existing = try loadFromKeychain() {
-            return existing
+        do {
+            if let existing = try loadFromDisk() {
+                return existing
+            }
+        } catch {
+            deleteFromDisk()
         }
         let fresh = generate()
-        try storeInKeychain(fresh)
+        try storeOnDisk(fresh)
         return fresh
     }
 
     /// Force regenerate (used for unpairing all peers).
     public func regenerate() throws -> Identity {
-        deleteFromKeychain()
+        deleteFromDisk()
         let fresh = generate()
-        try storeInKeychain(fresh)
+        try storeOnDisk(fresh)
         return fresh
     }
 
@@ -61,61 +64,60 @@ public final class DeviceIdentity {
         )
     }
 
-    private func loadFromKeychain() throws -> Identity? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
-            kSecReturnData as String: true,
-        ]
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        switch status {
-        case errSecSuccess:
-            guard let data = result as? Data, data.count == 32 else {
-                throw IdentityError.malformedKeyMaterial
-            }
-            do {
-                let key = try Curve25519.Signing.PrivateKey(rawRepresentation: data)
-                let pub = key.publicKey.rawRepresentation
-                let fp = SHA256.hash(data: pub).withUnsafeBytes { Data($0) }
-                return Identity(
-                    privateKeyData: key.rawRepresentation,
-                    publicKeyData: pub,
-                    publicKeyFingerprint: fp.base64EncodedString()
-                )
-            } catch {
-                throw IdentityError.malformedKeyMaterial
-            }
-        case errSecItemNotFound:
+    private func loadFromDisk() throws -> Identity? {
+        let url = identityURL(createDirectory: false)
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return nil
-        default:
-            throw IdentityError.keychainRead(status)
+        }
+        do {
+            let data = try Data(contentsOf: url)
+            let stored = try JSONDecoder().decode(StoredIdentity.self, from: data)
+            guard stored.privateKeyData.count == 32 else {
+                throw IdentityError.malformedKeyMaterial
+            }
+            let key = try Curve25519.Signing.PrivateKey(rawRepresentation: stored.privateKeyData)
+            let pub = key.publicKey.rawRepresentation
+            let fp = SHA256.hash(data: pub).withUnsafeBytes { Data($0) }
+            return Identity(
+                privateKeyData: key.rawRepresentation,
+                publicKeyData: pub,
+                publicKeyFingerprint: fp.base64EncodedString()
+            )
+        } catch let error as IdentityError {
+            throw error
+        } catch {
+            throw IdentityError.fileRead(error)
         }
     }
 
-    private func storeInKeychain(_ identity: Identity) throws {
-        let attributes: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
-            kSecValueData as String: identity.privateKeyData,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
-        ]
-        deleteFromKeychain()
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        if status != errSecSuccess {
-            throw IdentityError.keychainStore(status)
+    private func storeOnDisk(_ identity: Identity) throws {
+        do {
+            let url = identityURL(createDirectory: true)
+            let stored = StoredIdentity(privateKeyData: identity.privateKeyData)
+            let data = try JSONEncoder().encode(stored)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            throw IdentityError.fileStore(error)
         }
     }
 
-    private func deleteFromKeychain() {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: Self.service,
-            kSecAttrAccount as String: Self.account,
-        ]
-        SecItemDelete(query as CFDictionary)
+    private func deleteFromDisk() {
+        try? FileManager.default.removeItem(at: identityURL(createDirectory: false))
+    }
+
+    private func identityURL(createDirectory: Bool) -> URL {
+        let fm = FileManager.default
+        let base = (try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: createDirectory))
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let dir = base.appendingPathComponent(Self.applicationSupportSubdir, isDirectory: true)
+        if createDirectory {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent(Self.filename)
+    }
+
+    private struct StoredIdentity: Codable {
+        let privateKeyData: Data
     }
 }
 

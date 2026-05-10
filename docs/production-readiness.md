@@ -124,8 +124,9 @@ Work:
 - Implement `TlsSession` on macOS with `Network.framework` TLS 1.3 and on
   Windows with `SslStream`/Schannel.
 - Bind the TLS certificate to each platform's durable `DeviceIdentity`.
-- Generate and store local identity in Keychain on macOS and DPAPI-protected
-  user storage on Windows.
+- Generate and store release local identity in Keychain on macOS and
+  DPAPI-protected user storage on Windows. Current macOS dev builds deliberately
+  use Application Support file storage to avoid Keychain password prompts.
 - Implement 6-digit SAS/PIN pairing from the TLS exporter.
 - Persist pinned peer SPKI hashes.
 - Enforce exact peer pin matches on future connections.
