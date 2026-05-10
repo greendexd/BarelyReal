@@ -100,9 +100,11 @@ struct SettingsView: View {
             section(title: "Permissions", icon: "hand.raised") {
                 permissionRow(name: "Accessibility",
                               granted: store.accessibilityGranted,
+                              optional: false,
                               open: store.openAccessibilitySettings)
                 permissionRow(name: "Input Monitoring",
                               granted: store.inputMonitoringGranted,
+                              optional: true,
                               open: store.openInputMonitoringSettings)
 
                 HStack(spacing: 8) {
@@ -146,14 +148,21 @@ struct SettingsView: View {
         }
     }
 
-    private func permissionRow(name: String, granted: Bool, open: @escaping () -> Void) -> some View {
+    private func permissionRow(name: String, granted: Bool, optional: Bool, open: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(granted ? .green : .orange)
-            Text(name)
-                .font(.callout)
+            Image(systemName: granted ? "checkmark.circle.fill" : (optional ? "info.circle.fill" : "exclamationmark.circle.fill"))
+                .foregroundStyle(granted ? VisionPalette.mint : (optional ? .secondary : VisionPalette.amber))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name)
+                    .font(.callout)
+                if optional && !granted {
+                    Text("Optional. Start can still use Accessibility capture.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Spacer()
-            Text(granted ? "Granted" : "Missing")
+            Text(granted ? "Granted" : (optional ? "Optional" : "Missing"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button("Open") { open() }

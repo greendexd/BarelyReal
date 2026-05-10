@@ -2,7 +2,8 @@ import Foundation
 import CoreGraphics
 
 /// Captures local mouse + keyboard events via CGEventTap when this machine owns input.
-/// Requires Accessibility + Input Monitoring TCC entitlements.
+/// Accessibility is required. Input Monitoring is useful on some macOS setups, but the
+/// current dev build should still attempt capture when only Accessibility is granted.
 public final class EventTap {
     public enum EventTapError: Error, Equatable {
         case createFailed

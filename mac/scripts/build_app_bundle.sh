@@ -59,7 +59,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<'PLIST'
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSInputMonitoringUsageDescription</key>
-  <string>BarelyReal needs Input Monitoring to capture keyboard and mouse events for sharing them with your paired Windows machine.</string>
+  <string>BarelyReal can use Input Monitoring on macOS setups where Accessibility event capture is not enough.</string>
   <key>NSLocalNetworkUsageDescription</key>
   <string>BarelyReal connects to your paired Windows machine on your local network.</string>
   <key>NSBonjourServices</key>

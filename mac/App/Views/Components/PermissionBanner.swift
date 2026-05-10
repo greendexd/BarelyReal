@@ -7,7 +7,7 @@ struct PermissionBanner: View {
     let onOpenInputMonitoring: () -> Void
     let onRefresh: () -> Void
 
-    private var hasIssue: Bool { !accessibilityGranted || !inputMonitoringGranted }
+    private var hasIssue: Bool { !accessibilityGranted }
 
     var body: some View {
         if hasIssue {
@@ -18,7 +18,7 @@ struct PermissionBanner: View {
                     .symbolRenderingMode(.hierarchical)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Permissions required")
+                    Text("Accessibility required")
                         .font(.headline)
                     Text(missingDescription)
                         .font(.callout)
@@ -26,14 +26,8 @@ struct PermissionBanner: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     HStack(spacing: 8) {
-                        if !accessibilityGranted {
-                            Button("Open Accessibility", action: onOpenAccessibility)
-                                .controlSize(.small)
-                        }
-                        if !inputMonitoringGranted {
-                            Button("Request Input Monitoring", action: onOpenInputMonitoring)
-                                .controlSize(.small)
-                        }
+                        Button("Open Accessibility", action: onOpenAccessibility)
+                            .controlSize(.small)
                         Button("Refresh", systemImage: "arrow.clockwise", action: onRefresh)
                             .controlSize(.small)
                             .labelStyle(.iconOnly)
@@ -53,15 +47,6 @@ struct PermissionBanner: View {
     }
 
     private var missingDescription: String {
-        switch (accessibilityGranted, inputMonitoringGranted) {
-        case (false, false):
-            return "BarelyReal needs Accessibility and Input Monitoring to capture keyboard and mouse."
-        case (false, true):
-            return "BarelyReal needs Accessibility access to control your cursor."
-        case (true, false):
-            return "BarelyReal needs Input Monitoring to capture key presses."
-        default:
-            return ""
-        }
+        "BarelyReal needs Accessibility access to capture and release keyboard/mouse control. Input Monitoring is optional in this dev build."
     }
 }

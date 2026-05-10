@@ -48,7 +48,7 @@ Never written to plain-text files, never logged.
 
 ### Privilege
 
-- macOS app needs **Accessibility** and **Input Monitoring** TCC entitlements (granted by user in System Settings → Privacy & Security). No root required.
+- macOS app needs **Accessibility** for the current CGEventTap capture path. **Input Monitoring** is exposed as an optional diagnostic permission for macOS setups where keyboard capture needs it. No root required.
 - Windows app uses low-level hooks; runs as a normal user. **UAC-elevated mode** is opt-in (toggle in settings) — only required to inject input into elevated windows (Task Manager, UAC prompt). When elevated, we display a clear indicator.
 
 ### Lock on disconnect (opt-in)

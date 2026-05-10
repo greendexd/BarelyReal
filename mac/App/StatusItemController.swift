@@ -21,7 +21,7 @@ final class StatusItemController {
         menu.addItem(NSMenuItem(title: "Show Window", action: #selector(showWindow), keyEquivalent: "b"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Open Accessibility Settings", action: #selector(openAccessibilitySettings), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "Open Input Monitoring Settings", action: #selector(openInputMonitoringSettings), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "Request Input Monitoring (Optional)", action: #selector(openInputMonitoringSettings), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "Refresh Permissions", action: #selector(refreshPermissions), keyEquivalent: "r"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit BarelyReal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))

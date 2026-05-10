@@ -83,7 +83,7 @@ final class BarelyRealStore: ObservableObject {
             appendLog("Accessibility permission is missing; KM capture may not start.")
         }
         if !inputMonitoringGranted {
-            appendLog("Input Monitoring permission is missing; keyboard capture may fail.")
+            appendLog("Input Monitoring is not granted; continuing with Accessibility event capture.")
         }
 
         switch settings.mode {
@@ -177,7 +177,7 @@ final class BarelyRealStore: ObservableObject {
 
     func requestInputMonitoring() {
         let granted = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
-        appendLog(granted ? "Input Monitoring granted" : "Input Monitoring requested; enable BarelyReal in System Settings")
+        appendLog(granted ? "Input Monitoring granted" : "Input Monitoring requested. If macOS does not list BarelyReal, Start can still use Accessibility capture in this dev build.")
         refreshPermissions()
     }
 
@@ -185,7 +185,7 @@ final class BarelyRealStore: ObservableObject {
         runTccutilReset(service: "Accessibility")
         runTccutilReset(service: "ListenEvent")
         refreshPermissions()
-        appendLog("Reset BarelyReal permissions. Enable Accessibility and Input Monitoring again.")
+        appendLog("Reset BarelyReal permissions. Enable Accessibility again; Input Monitoring is optional.")
         openAccessibilitySettings()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
             self?.openInputMonitoringSettings()
