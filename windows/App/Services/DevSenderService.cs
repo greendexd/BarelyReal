@@ -17,6 +17,7 @@ internal sealed class DevSenderService : IDisposable
     private System.Threading.Timer? _heartbeatTimer;
     private uint _heartbeatSeq = 1_000_000_000;
     private DateTime _lastFrameSentAt = DateTime.MinValue;
+    private DateTime _lastStatsChangedUtc = DateTime.MinValue;
 
     public event Action<string>? LogLine;
     public event Action? StatsChanged;
@@ -46,6 +47,7 @@ internal sealed class DevSenderService : IDisposable
             FramesSent = 0;
             _heartbeatSeq = 1_000_000_000;
             _lastFrameSentAt = DateTime.MinValue;
+            _lastStatsChangedUtc = DateTime.MinValue;
 
             _stream = new UdpKmStream(kmSharedSecret);
             _bridge = new WindowsEdgeBridge(localPeerId, remotePeerId, layoutProvider, remoteDisplaysProvider, _stream, PeerHost, PeerPort)
@@ -70,7 +72,7 @@ internal sealed class DevSenderService : IDisposable
 
                 IsRunning = true;
                 Log($"Sending KM frames to {PeerHost}:{PeerPort} using synced layout{(KmAuthEnabled ? " with HMAC authentication" : "")}.");
-                StatsChanged?.Invoke();
+                NotifyStatsChanged(immediate: true);
             }
             catch
             {
@@ -106,7 +108,7 @@ internal sealed class DevSenderService : IDisposable
             if (wasRunning)
                 Log("Sender stopped.");
 
-            StatsChanged?.Invoke();
+            NotifyStatsChanged(immediate: true);
         }
     }
 
@@ -124,9 +126,9 @@ internal sealed class DevSenderService : IDisposable
 
         _lastFrameSentAt = DateTime.UtcNow;
         FramesSent++;
-        if (FramesSent <= 10 || FramesSent % 500 == 0)
+        if (FramesSent <= 3 || FramesSent % 500 == 0)
             Log($"sent seq={frame.Seq} type={frame.Type}");
-        StatsChanged?.Invoke();
+        NotifyStatsChanged();
     }
 
     private void HandleForceSwitch()
@@ -158,5 +160,15 @@ internal sealed class DevSenderService : IDisposable
     private void Log(string message)
     {
         LogLine?.Invoke($"[{DateTime.Now:HH:mm:ss}] {message}");
+    }
+
+    private void NotifyStatsChanged(bool immediate = false)
+    {
+        var now = DateTime.UtcNow;
+        if (!immediate && now - _lastStatsChangedUtc < TimeSpan.FromMilliseconds(100))
+            return;
+
+        _lastStatsChangedUtc = now;
+        StatsChanged?.Invoke();
     }
 }

@@ -15,6 +15,7 @@ internal sealed class DevReceiverService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _clipboardTask;
     private KmLinkMonitor? _linkMonitor;
+    private DateTime _lastStatsChangedUtc = DateTime.MinValue;
 
     public ClipboardHistory History => _history;
     public event Action? HistoryChanged;
@@ -54,6 +55,7 @@ internal sealed class DevReceiverService : IDisposable
             KmAuthRequired = !string.IsNullOrWhiteSpace(kmSharedSecret);
             FramesReceived = 0;
             ClipboardEvents = 0;
+            _lastStatsChangedUtc = DateTime.MinValue;
             _cts = new CancellationTokenSource();
             _injector = new InputInjector { Log = Log };
             _stream = new UdpKmStream(kmSharedSecret);
@@ -73,7 +75,7 @@ internal sealed class DevReceiverService : IDisposable
                 Log($"Receiving KM frames on UDP :{kmPort} from {ExpectedPeerHost} only{(KmAuthRequired ? " with HMAC authentication" : "")}.");
                 if (!string.IsNullOrWhiteSpace(ClipboardPeer))
                     Log($"Clipboard sync listening on TCP :{clipboardPort}, peer {ClipboardPeer}:{clipboardPort}.");
-                StatsChanged?.Invoke();
+                NotifyStatsChanged(immediate: true);
             }
             catch
             {
@@ -113,7 +115,7 @@ internal sealed class DevReceiverService : IDisposable
             if (wasRunning)
                 Log("Receiver stopped.");
 
-            StatsChanged?.Invoke();
+            NotifyStatsChanged(immediate: true);
         }
     }
 
@@ -124,14 +126,14 @@ internal sealed class DevReceiverService : IDisposable
             case KmLinkMonitor.Event.LinkRecovered:
                 LinkUp = true;
                 Log("KM link up.");
-                StatsChanged?.Invoke();
+                NotifyStatsChanged(immediate: true);
                 break;
 
             case KmLinkMonitor.Event.LinkLost:
                 LinkUp = false;
                 _stream?.ResetReplayProtection();
                 Log($"KM link lost (silent for {silent.TotalMilliseconds:F0} ms).");
-                StatsChanged?.Invoke();
+                NotifyStatsChanged(immediate: true);
                 break;
 
             case KmLinkMonitor.Event.ShouldLockScreen:
@@ -161,7 +163,7 @@ internal sealed class DevReceiverService : IDisposable
                 || line.StartsWith("clipboard ->", StringComparison.OrdinalIgnoreCase))
             {
                 ClipboardEvents++;
-                StatsChanged?.Invoke();
+                NotifyStatsChanged(immediate: true);
             }
 
             Log(line);
@@ -220,9 +222,19 @@ internal sealed class DevReceiverService : IDisposable
         }
 
         FramesReceived++;
-        if (FramesReceived <= 10 || FramesReceived % 100 == 0)
+        if (FramesReceived <= 3 || FramesReceived % 500 == 0)
             Log($"received seq={frame.Seq} type={frame.Type}");
 
+        NotifyStatsChanged();
+    }
+
+    private void NotifyStatsChanged(bool immediate = false)
+    {
+        var now = DateTime.UtcNow;
+        if (!immediate && now - _lastStatsChangedUtc < TimeSpan.FromMilliseconds(100))
+            return;
+
+        _lastStatsChangedUtc = now;
         StatsChanged?.Invoke();
     }
 

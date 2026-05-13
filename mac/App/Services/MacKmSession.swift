@@ -173,10 +173,12 @@ private final class RemoteInputGuard {
     private var isActive = false
     private var hiddenDisplays: [CGDirectDisplayID] = []
     private var pinnedPoint: CGPoint?
+    private var lastPinMaintenance: CFAbsoluteTime = 0
 
     func start(pinnedAt point: CGPoint) {
         guard !isActive else { return }
         pinnedPoint = point
+        lastPinMaintenance = CFAbsoluteTimeGetCurrent()
         CGWarpMouseCursorPosition(point)
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
         hideCursorOnActiveDisplays()
@@ -185,11 +187,20 @@ private final class RemoteInputGuard {
 
     func maintainPin() {
         guard isActive else { return }
-        if let pinnedPoint {
-            CGWarpMouseCursorPosition(pinnedPoint)
-        }
         if hiddenDisplays.isEmpty {
             hideCursorOnActiveDisplays()
+        }
+        guard let pinnedPoint else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastPinMaintenance >= Self.pinCheckInterval else { return }
+        lastPinMaintenance = now
+
+        let current = CGEvent(source: nil)?.location ?? pinnedPoint
+        let dx = abs(current.x - pinnedPoint.x)
+        let dy = abs(current.y - pinnedPoint.y)
+        if dx > Self.pinDriftTolerance || dy > Self.pinDriftTolerance {
+            CGWarpMouseCursorPosition(pinnedPoint)
         }
     }
 
@@ -201,6 +212,7 @@ private final class RemoteInputGuard {
         hiddenDisplays.removeAll()
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         pinnedPoint = nil
+        lastPinMaintenance = 0
         isActive = false
     }
 
@@ -222,6 +234,9 @@ private final class RemoteInputGuard {
         CGGetActiveDisplayList(count, &displays, &count)
         return Array(displays.prefix(Int(count)))
     }
+
+    private static let pinCheckInterval: CFTimeInterval = 0.05
+    private static let pinDriftTolerance: CGFloat = 2
 }
 
 private final class EdgeBridge {

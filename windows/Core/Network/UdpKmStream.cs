@@ -12,6 +12,7 @@ public sealed class UdpKmStream : IDisposable
 {
     public event Action<KmFrame>? OnFrame;
     public event Action<string>? LogLine;
+    public bool VerboseFrameLogging { get; set; }
 
     private UdpClient? _client;
     private CancellationTokenSource? _cts;
@@ -21,6 +22,7 @@ public sealed class UdpKmStream : IDisposable
     private ulong _droppedFrames;
     private ulong _authFailures;
     private ulong _replayDrops;
+    private ulong _receivedFrames;
     private DateTime _lastDropLogUtc = DateTime.MinValue;
     private DateTime _lastAuthFailureLogUtc = DateTime.MinValue;
     private DateTime _lastReplayDropLogUtc = DateTime.MinValue;
@@ -46,6 +48,7 @@ public sealed class UdpKmStream : IDisposable
         _droppedFrames = 0;
         _authFailures = 0;
         _replayDrops = 0;
+        _receivedFrames = 0;
         _lastDropLogUtc = DateTime.MinValue;
         _lastAuthFailureLogUtc = DateTime.MinValue;
         _lastReplayDropLogUtc = DateTime.MinValue;
@@ -106,11 +109,10 @@ public sealed class UdpKmStream : IDisposable
                 if (payload is null)
                     continue;
 
-                LogLine?.Invoke(
-                    $"UDP frame received bytes len={payload.Length} from={result.RemoteEndPoint} hex={PreviewHex(payload)}");
                 try
                 {
                     var frame = KmFrameCodec.Decode(payload);
+                    LogReceivedFrame(result.RemoteEndPoint, payload, frame);
                     if (IsAuthenticationEnabled && !_replayGuard.TryAccept(frame, out var replayFailure))
                     {
                         LogReplayDrop(result.RemoteEndPoint, frame, replayFailure);
@@ -133,6 +135,19 @@ public sealed class UdpKmStream : IDisposable
         catch (ObjectDisposedException)
         {
             // Expected during Close().
+        }
+    }
+
+    private void LogReceivedFrame(IPEndPoint remoteEndPoint, byte[] payload, KmFrame frame)
+    {
+        _receivedFrames++;
+        if (!VerboseFrameLogging)
+            return;
+
+        if (_receivedFrames <= 3 || _receivedFrames % 1_000 == 0)
+        {
+            LogLine?.Invoke(
+                $"UDP frame received len={payload.Length} from={remoteEndPoint} seq={frame.Seq} type={frame.Type} hex={PreviewHex(payload)}");
         }
     }
 
