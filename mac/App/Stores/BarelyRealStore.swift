@@ -475,13 +475,67 @@ final class BarelyRealStore: ObservableObject {
         merged.append(contentsOf: scannedPeers)
         discoveredPeers = merged.sorted { lhs, rhs in
             if lhs.stale != rhs.stale { return !lhs.stale }
+            let leftRank = peerAutoConnectRank(lhs)
+            let rightRank = peerAutoConnectRank(rhs)
+            if leftRank != rightRank { return leftRank < rightRank }
             return (lhs.bestHost ?? lhs.name).localizedStandardCompare(rhs.bestHost ?? rhs.name) == .orderedAscending
         }
 
         guard let peer = discoveredPeers.first(where: { !$0.stale }),
-              let host = peer.bestHost
+              let host = autoConnectHost(for: peer)
         else { return }
         suggestPeerHost(host, source: peer.version == "LAN scan" ? "LAN scan" : "mDNS")
+    }
+
+    private func peerAutoConnectRank(_ peer: MdnsPeer) -> Int {
+        guard !peer.stale else { return 100 }
+        if peer.version == "LAN scan" { return 0 }
+        guard let host = autoConnectHost(for: peer) else { return 90 }
+        return hostPriority(host)
+    }
+
+    private func autoConnectHost(for peer: MdnsPeer) -> String? {
+        let candidates = peerHostCandidates(peer)
+
+        if peer.version == "LAN scan" {
+            return candidates.first
+        }
+
+        if let sameSubnet = candidates.first(where: isOnPreferredLocalSubnet) {
+            return sameSubnet
+        }
+
+        // Do not auto-select 10.x from mDNS. VPN adapters such as NordLynx commonly
+        // advertise only 10.x, which looks private but is a bad handoff target.
+        return candidates.first { hostPriority($0) <= 2 }
+    }
+
+    private func peerHostCandidates(_ peer: MdnsPeer) -> [String] {
+        var seen = Set<String>()
+        let raw = peer.addresses + [peer.bestHost, peer.hostName].compactMap { $0 }
+        return raw.compactMap { value in
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  !trimmed.contains(":"),
+                  seen.insert(trimmed.lowercased()).inserted
+            else { return nil }
+            return trimmed
+        }
+        .sorted { hostPriority($0) < hostPriority($1) }
+    }
+
+    private func isOnPreferredLocalSubnet(_ host: String) -> Bool {
+        LanPeerScanner.preferredLocalPrefixes().contains { host.hasPrefix($0) }
+    }
+
+    private func hostPriority(_ host: String) -> Int {
+        let parts = host.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return 100 }
+        if parts[0] == 192 && parts[1] == 168 { return 0 }
+        if parts[0] == 172 && (16...31).contains(parts[1]) { return 1 }
+        if parts[0] == 169 && parts[1] == 254 { return 2 }
+        if parts[0] == 10 { return 8 }
+        return 20
     }
 
     private func suggestPeerHost(_ host: String, source: String) {

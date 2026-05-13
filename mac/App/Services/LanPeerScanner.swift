@@ -45,6 +45,14 @@ final class LanPeerScanner {
         }
     }
 
+    static func preferredLocalPrefixes() -> [String] {
+        localPrivateIPv4Addresses().compactMap { local in
+            let parts = local.address.split(separator: ".").compactMap { Int($0) }
+            guard parts.count == 4 else { return nil }
+            return "\(parts[0]).\(parts[1]).\(parts[2])."
+        }
+    }
+
     private func probe(host: String, port: UInt16, timeout: TimeInterval, completion: @escaping (Bool) -> Void) {
         guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
             completion(false)

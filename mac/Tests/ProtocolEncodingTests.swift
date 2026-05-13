@@ -525,5 +525,19 @@ enum ProtocolEncodingTests {
             try expectEqual(decoded["peer_id"], "windows")
             try expectEqual(decoded["pk"], "dev")
         }
+
+        r.run("mdnsPeerBestHostPrefersWifiLanOverVpn") {
+            let peer = MdnsPeer(
+                name: "REDLYK",
+                os: "windows",
+                version: "0.1.0",
+                publicKeyFingerprint: "dev",
+                peerId: "windows",
+                hostName: "REDLYK.local",
+                addresses: ["10.5.0.2", "192.168.0.100"],
+                port: 24_800
+            )
+            try expectEqual(peer.bestHost, "192.168.0.100")
+        }
     }
 }

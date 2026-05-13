@@ -82,6 +82,10 @@ struct RootView: View {
             store.onSuggestedPeerHost = { host in
                 applySuggestedPeerHost(host)
             }
+            if isLikelyVpnPeerHost(peerHost) {
+                peerHost = ""
+                lastAutoAppliedPeerHost = ""
+            }
             applySuggestedPeerHost(store.suggestedPeerHost)
         }
         .onDisappear {
@@ -216,7 +220,7 @@ struct RootView: View {
 
     private func applySuggestedPeerHost(_ host: String) {
         let suggested = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !suggested.isEmpty else { return }
+        guard !suggested.isEmpty, !isLikelyVpnPeerHost(suggested) else { return }
 
         let current = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
         let shouldReplace = current.isEmpty
@@ -227,6 +231,11 @@ struct RootView: View {
         guard shouldReplace else { return }
         peerHost = suggested
         lastAutoAppliedPeerHost = suggested
+    }
+
+    private func isLikelyVpnPeerHost(_ host: String) -> Bool {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("10.5.")
     }
 }
 

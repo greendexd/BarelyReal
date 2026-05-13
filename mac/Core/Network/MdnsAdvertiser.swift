@@ -18,8 +18,10 @@ public struct MdnsPeer: Equatable, Identifiable {
     }
 
     public var bestHost: String? {
-        addresses.first(where: Self.isPrivateIPv4)
-            ?? addresses.first(where: { !$0.contains(":") })
+        addresses
+            .filter { !$0.contains(":") }
+            .sorted { Self.ipv4Priority($0) < Self.ipv4Priority($1) }
+            .first
             ?? hostName
     }
 
@@ -57,6 +59,17 @@ public struct MdnsPeer: Equatable, Identifiable {
             || (parts[0] == 172 && (16...31).contains(parts[1]))
             || (parts[0] == 192 && parts[1] == 168)
             || parts[0] == 169 && parts[1] == 254
+    }
+
+    private static func ipv4Priority(_ value: String) -> Int {
+        let parts = value.split(separator: ".").compactMap { Int($0) }
+        guard parts.count == 4 else { return 100 }
+
+        if parts[0] == 192 && parts[1] == 168 { return 0 }
+        if parts[0] == 172 && (16...31).contains(parts[1]) { return 1 }
+        if parts[0] == 169 && parts[1] == 254 { return 2 }
+        if parts[0] == 10 { return 8 }
+        return isPrivateIPv4(value) ? 4 : 20
     }
 }
 
