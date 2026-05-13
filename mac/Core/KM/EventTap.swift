@@ -105,7 +105,7 @@ public final class EventTap {
             if let eventTap {
                 CGEvent.tapEnable(tap: eventTap, enable: true)
             }
-            return Unmanaged.passUnretained(event)
+            return suppressLocalEvents ? nil : Unmanaged.passUnretained(event)
         }
 
         if Self.isEmergencyReturnHotkey(type: type, event: event) {

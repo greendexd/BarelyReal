@@ -175,18 +175,21 @@ private final class RemoteInputGuard {
     private var hiddenDisplays: [CGDirectDisplayID] = []
     private var pinnedPoint: CGPoint?
     private var lastPinMaintenance: CFAbsoluteTime = 0
+    private var lastAssociationAssert: CFAbsoluteTime = 0
 
     func start(pinnedAt point: CGPoint) {
         guard !isActive else { return }
         pinnedPoint = point
-        lastPinMaintenance = CFAbsoluteTimeGetCurrent()
+        let now = CFAbsoluteTimeGetCurrent()
+        lastPinMaintenance = now
+        lastAssociationAssert = now
         CGWarpMouseCursorPosition(point)
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
         hideCursorOnActiveDisplays()
         isActive = true
     }
 
-    func maintainPin() {
+    func maintainPin(force: Bool = false) {
         guard isActive else { return }
         if hiddenDisplays.isEmpty {
             hideCursorOnActiveDisplays()
@@ -194,7 +197,12 @@ private final class RemoteInputGuard {
         guard let pinnedPoint else { return }
 
         let now = CFAbsoluteTimeGetCurrent()
-        guard now - lastPinMaintenance >= Self.pinCheckInterval else { return }
+        if now - lastAssociationAssert >= Self.associationAssertInterval {
+            _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+            lastAssociationAssert = now
+        }
+
+        guard force || now - lastPinMaintenance >= Self.pinCheckInterval else { return }
         lastPinMaintenance = now
 
         let current = CGEvent(source: nil)?.location ?? pinnedPoint
@@ -214,6 +222,7 @@ private final class RemoteInputGuard {
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         pinnedPoint = nil
         lastPinMaintenance = 0
+        lastAssociationAssert = 0
         isActive = false
     }
 
@@ -236,8 +245,9 @@ private final class RemoteInputGuard {
         return Array(displays.prefix(Int(count)))
     }
 
-    private static let pinCheckInterval: CFTimeInterval = 0.05
-    private static let pinDriftTolerance: CGFloat = 2
+    private static let pinCheckInterval: CFTimeInterval = 0.016
+    private static let associationAssertInterval: CFTimeInterval = 0.25
+    private static let pinDriftTolerance: CGFloat = 0.5
 }
 
 private final class EdgeBridge {
@@ -292,7 +302,7 @@ private final class EdgeBridge {
         }
 
         updateRemotePosition(for: frame)
-        guardController.maintainPin()
+        guardController.maintainPin(force: frame.type == .mouseMoveRel)
         stream.send(frame, to: endpoint)
         return true
     }
