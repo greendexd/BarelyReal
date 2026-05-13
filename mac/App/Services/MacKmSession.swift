@@ -179,6 +179,7 @@ private final class RemoteInputGuard {
     private var lastAssociationAssert: CFAbsoluteTime = 0
     private var lastVisibilityAssert: CFAbsoluteTime = 0
     private var watchdog: DispatchSourceTimer?
+    private let cursorShield = CursorShieldController()
 
     func start(pinnedAt point: CGPoint) {
         guard !isActive else { return }
@@ -187,8 +188,9 @@ private final class RemoteInputGuard {
         lastPinMaintenance = now
         lastAssociationAssert = now
         lastVisibilityAssert = 0
-        CGWarpMouseCursorPosition(point)
         isActive = true
+        cursorShield.show()
+        warpToPinnedPoint(point, deferred: false)
         assertRemoteCursorState(force: true)
         startWatchdog()
     }
@@ -198,7 +200,7 @@ private final class RemoteInputGuard {
         guard let pinnedPoint else { return }
 
         let now = CFAbsoluteTimeGetCurrent()
-        assertRemoteCursorState(now: now, force: force)
+        assertRemoteCursorState(now: now, force: false)
 
         guard force || now - lastPinMaintenance >= Self.pinCheckInterval else { return }
         lastPinMaintenance = now
@@ -206,8 +208,8 @@ private final class RemoteInputGuard {
         let current = CGEvent(source: nil)?.location ?? pinnedPoint
         let dx = abs(current.x - pinnedPoint.x)
         let dy = abs(current.y - pinnedPoint.y)
-        if dx > Self.pinDriftTolerance || dy > Self.pinDriftTolerance {
-            CGWarpMouseCursorPosition(pinnedPoint)
+        if force || dx > Self.pinDriftTolerance || dy > Self.pinDriftTolerance {
+            warpToPinnedPoint(pinnedPoint, deferred: force)
         }
     }
 
@@ -215,6 +217,7 @@ private final class RemoteInputGuard {
         guard isActive else { return }
         watchdog?.cancel()
         watchdog = nil
+        cursorShield.hide()
 
         for (display, depth) in hiddenDisplayDepths {
             for _ in 0..<depth {
@@ -243,7 +246,7 @@ private final class RemoteInputGuard {
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + Self.watchdogInterval, repeating: Self.watchdogInterval)
         timer.setEventHandler { [weak self] in
-            self?.maintainPin(force: true)
+            self?.maintainPin(force: false)
         }
         timer.resume()
         watchdog = timer
@@ -260,6 +263,7 @@ private final class RemoteInputGuard {
 
         hideCursorOnActiveDisplays()
         hideNSCursorIfNeeded()
+        cursorShield.show()
     }
 
     private func hideCursorOnActiveDisplays() {
@@ -278,6 +282,24 @@ private final class RemoteInputGuard {
         nsCursorHideDepth += 1
     }
 
+    private func warpToPinnedPoint(_ point: CGPoint, deferred: Bool) {
+        Self.moveCursor(to: point)
+
+        if deferred {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isActive, self.pinnedPoint == point else { return }
+                Self.moveCursor(to: point)
+            }
+        }
+    }
+
+    private static func moveCursor(to point: CGPoint) {
+        if let display = display(containing: point) {
+            _ = CGDisplayMoveCursorToPoint(display, point)
+        }
+        CGWarpMouseCursorPosition(point)
+    }
+
     private static func activeDisplays() -> [CGDirectDisplayID] {
         var count: UInt32 = 0
         CGGetActiveDisplayList(0, nil, &count)
@@ -285,6 +307,12 @@ private final class RemoteInputGuard {
         var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
         CGGetActiveDisplayList(count, &displays, &count)
         return Array(displays.prefix(Int(count)))
+    }
+
+    private static func display(containing point: CGPoint) -> CGDirectDisplayID? {
+        activeDisplays().first { display in
+            CGDisplayBounds(display).contains(point)
+        }
     }
 
     private static let pinCheckInterval: CFTimeInterval = 0.016
