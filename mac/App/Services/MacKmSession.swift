@@ -172,10 +172,13 @@ enum KmSessionError: Error, CustomStringConvertible {
 
 private final class RemoteInputGuard {
     private var isActive = false
-    private var hiddenDisplays: [CGDirectDisplayID] = []
+    private var hiddenDisplayDepths: [CGDirectDisplayID: Int] = [:]
+    private var nsCursorHideDepth = 0
     private var pinnedPoint: CGPoint?
     private var lastPinMaintenance: CFAbsoluteTime = 0
     private var lastAssociationAssert: CFAbsoluteTime = 0
+    private var lastVisibilityAssert: CFAbsoluteTime = 0
+    private var watchdog: DispatchSourceTimer?
 
     func start(pinnedAt point: CGPoint) {
         guard !isActive else { return }
@@ -183,24 +186,19 @@ private final class RemoteInputGuard {
         let now = CFAbsoluteTimeGetCurrent()
         lastPinMaintenance = now
         lastAssociationAssert = now
+        lastVisibilityAssert = 0
         CGWarpMouseCursorPosition(point)
-        _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-        hideCursorOnActiveDisplays()
         isActive = true
+        assertRemoteCursorState(force: true)
+        startWatchdog()
     }
 
     func maintainPin(force: Bool = false) {
         guard isActive else { return }
-        if hiddenDisplays.isEmpty {
-            hideCursorOnActiveDisplays()
-        }
         guard let pinnedPoint else { return }
 
         let now = CFAbsoluteTimeGetCurrent()
-        if now - lastAssociationAssert >= Self.associationAssertInterval {
-            _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
-            lastAssociationAssert = now
-        }
+        assertRemoteCursorState(now: now, force: force)
 
         guard force || now - lastPinMaintenance >= Self.pinCheckInterval else { return }
         lastPinMaintenance = now
@@ -215,25 +213,69 @@ private final class RemoteInputGuard {
 
     func stop() {
         guard isActive else { return }
-        for display in hiddenDisplays {
-            _ = CGDisplayShowCursor(display)
+        watchdog?.cancel()
+        watchdog = nil
+
+        for (display, depth) in hiddenDisplayDepths {
+            for _ in 0..<depth {
+                _ = CGDisplayShowCursor(display)
+            }
         }
-        hiddenDisplays.removeAll()
+        hiddenDisplayDepths.removeAll()
+
+        for _ in 0..<nsCursorHideDepth {
+            NSCursor.unhide()
+        }
+        nsCursorHideDepth = 0
+
         _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
         pinnedPoint = nil
         lastPinMaintenance = 0
         lastAssociationAssert = 0
+        lastVisibilityAssert = 0
         isActive = false
     }
 
     deinit { stop() }
 
+    private func startWatchdog() {
+        watchdog?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + Self.watchdogInterval, repeating: Self.watchdogInterval)
+        timer.setEventHandler { [weak self] in
+            self?.maintainPin(force: true)
+        }
+        timer.resume()
+        watchdog = timer
+    }
+
+    private func assertRemoteCursorState(now: CFAbsoluteTime = CFAbsoluteTimeGetCurrent(), force: Bool) {
+        if force || now - lastAssociationAssert >= Self.associationAssertInterval {
+            _ = CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+            lastAssociationAssert = now
+        }
+
+        guard force || now - lastVisibilityAssert >= Self.visibilityAssertInterval else { return }
+        lastVisibilityAssert = now
+
+        hideCursorOnActiveDisplays()
+        hideNSCursorIfNeeded()
+    }
+
     private func hideCursorOnActiveDisplays() {
-        for display in Self.activeDisplays() where !hiddenDisplays.contains(display) {
+        for display in Self.activeDisplays() {
+            let depth = hiddenDisplayDepths[display, default: 0]
+            guard depth < Self.maxHideDepthPerDisplay else { continue }
             if CGDisplayHideCursor(display) == .success {
-                hiddenDisplays.append(display)
+                hiddenDisplayDepths[display] = depth + 1
             }
         }
+    }
+
+    private func hideNSCursorIfNeeded() {
+        guard nsCursorHideDepth < Self.maxNSCursorHideDepth else { return }
+        NSCursor.hide()
+        nsCursorHideDepth += 1
     }
 
     private static func activeDisplays() -> [CGDirectDisplayID] {
@@ -246,8 +288,12 @@ private final class RemoteInputGuard {
     }
 
     private static let pinCheckInterval: CFTimeInterval = 0.016
+    private static let watchdogInterval: TimeInterval = 1.0 / 120.0
     private static let associationAssertInterval: CFTimeInterval = 0.25
+    private static let visibilityAssertInterval: CFTimeInterval = 0.10
     private static let pinDriftTolerance: CGFloat = 0.5
+    private static let maxHideDepthPerDisplay = 128
+    private static let maxNSCursorHideDepth = 32
 }
 
 private final class EdgeBridge {

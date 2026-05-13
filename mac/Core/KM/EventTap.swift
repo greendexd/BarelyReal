@@ -33,14 +33,9 @@ public final class EventTap {
     public func start() throws {
         guard !isRunning else { return }
 
-        let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: Self.eventMask,
-            callback: Self.callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        )
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        let tap = Self.makeTap(location: .cghidEventTap, userInfo: userInfo)
+            ?? Self.makeTap(location: .cgSessionEventTap, userInfo: userInfo)
 
         guard let tap else { throw EventTapError.createFailed }
 
@@ -98,6 +93,17 @@ public final class EventTap {
 
         let tap = Unmanaged<EventTap>.fromOpaque(userInfo).takeUnretainedValue()
         return tap.handle(type: type, event: event)
+    }
+
+    private static func makeTap(location: CGEventTapLocation, userInfo: UnsafeMutableRawPointer) -> CFMachPort? {
+        CGEvent.tapCreate(
+            tap: location,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: userInfo
+        )
     }
 
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
