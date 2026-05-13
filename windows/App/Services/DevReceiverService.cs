@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using BarelyReal.Core.Clipboard;
 using BarelyReal.Core.Km;
@@ -15,7 +16,7 @@ internal sealed class DevReceiverService : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _clipboardTask;
     private KmLinkMonitor? _linkMonitor;
-    private DateTime _lastStatsChangedUtc = DateTime.MinValue;
+    private long _lastStatsChangedTimestamp;
 
     public ClipboardHistory History => _history;
     public event Action? HistoryChanged;
@@ -55,7 +56,7 @@ internal sealed class DevReceiverService : IDisposable
             KmAuthRequired = !string.IsNullOrWhiteSpace(kmSharedSecret);
             FramesReceived = 0;
             ClipboardEvents = 0;
-            _lastStatsChangedUtc = DateTime.MinValue;
+            _lastStatsChangedTimestamp = 0;
             _cts = new CancellationTokenSource();
             _injector = new InputInjector { Log = Log };
             _stream = new UdpKmStream(kmSharedSecret);
@@ -222,7 +223,7 @@ internal sealed class DevReceiverService : IDisposable
         }
 
         FramesReceived++;
-        if (FramesReceived <= 3 || FramesReceived % 500 == 0)
+        if (FramesReceived <= 3 || FramesReceived % 2_000 == 0)
             Log($"received seq={frame.Seq} type={frame.Type}");
 
         NotifyStatsChanged();
@@ -230,11 +231,12 @@ internal sealed class DevReceiverService : IDisposable
 
     private void NotifyStatsChanged(bool immediate = false)
     {
-        var now = DateTime.UtcNow;
-        if (!immediate && now - _lastStatsChangedUtc < TimeSpan.FromMilliseconds(100))
+        var now = Stopwatch.GetTimestamp();
+        if (!immediate && _lastStatsChangedTimestamp != 0
+            && Stopwatch.GetElapsedTime(_lastStatsChangedTimestamp, now) < TimeSpan.FromMilliseconds(100))
             return;
 
-        _lastStatsChangedUtc = now;
+        _lastStatsChangedTimestamp = now;
         StatsChanged?.Invoke();
     }
 

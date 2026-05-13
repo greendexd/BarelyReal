@@ -78,9 +78,9 @@ final class MacKmSession {
             bridge.forceReturnLocal(reason: "Emergency return to Mac (Ctrl+Option+Command+Esc)")
             tap?.suppressLocalEvents = bridge.shouldSuppressLocalEvents
         }
-        tap.onFrame = { [weak self, weak bridge, weak tap] frame in
+        tap.onFrameWithLocation = { [weak self, weak bridge, weak tap] frame, location in
             guard let self, let bridge else { return }
-            let didSend = bridge.handle(frame)
+            let didSend = bridge.handle(frame, localCursorLocation: location)
             tap?.suppressLocalEvents = bridge.shouldSuppressLocalEvents
             if didSend {
                 self.sentCount += 1
@@ -123,6 +123,7 @@ final class MacKmSession {
         hotkey.unregister()
         heartbeatPump?.stop()
         heartbeatPump = nil
+        tap.onFrameWithLocation = nil
         tap.stop()
         bridge?.stop()
         bridge = nil
@@ -250,6 +251,9 @@ private final class EdgeBridge {
     private let guardController = RemoteInputGuard()
 
     private var isRemoteActive = false
+    private var cachedLayout = Layout(screens: [])
+    private var cachedLayoutAt: CFAbsoluteTime = 0
+    private var activeLayoutSnapshot: Layout?
     private var remoteVirtualPoint: CGPoint?
     private var pinnedLocalPoint: CGPoint?
 
@@ -275,9 +279,9 @@ private final class EdgeBridge {
     var isRemote: Bool { isRemoteActive }
 
     @discardableResult
-    func handle(_ frame: KmFrame) -> Bool {
+    func handle(_ frame: KmFrame, localCursorLocation: CGPoint? = nil) -> Bool {
         if !isRemoteActive {
-            guard let entry = entryFrameIfCrossing(frame) else { return false }
+            guard let entry = entryFrameIfCrossing(frame, localCursorLocation: localCursorLocation) else { return false }
             stream.send(entry, to: endpoint)
             return true
         }
@@ -329,31 +333,40 @@ private final class EdgeBridge {
         returnLocal(reason: reason)
     }
 
-    private func entryFrameIfCrossing(_ frame: KmFrame) -> KmFrame? {
+    private func entryFrameIfCrossing(_ frame: KmFrame, localCursorLocation: CGPoint?) -> KmFrame? {
         guard frame.type == .mouseMoveRel,
               let move = try? KmPayload.decodeMouseMove(frame.payload)
         else { return nil }
 
-        let current = Self.currentCursorLocation()
+        let current = localCursorLocation ?? Self.currentCursorLocation()
         let projected = CGPoint(x: current.x + CGFloat(move.x), y: current.y + CGFloat(move.y))
-        let layout = layoutProvider()
+        let layout = currentLayout()
         guard layout.screen(at: Int(current.x.rounded()), Int(current.y.rounded()))?.peerId == localPeerId,
               let target = layout.screen(at: Int(projected.x.rounded()), Int(projected.y.rounded())),
               target.peerId == remotePeerId
         else { return nil }
 
-        return enterRemote(virtualPoint: entryPoint(projected: projected, target: target, move: move), reference: frame)
+        return enterRemote(
+            virtualPoint: entryPoint(projected: projected, target: target, move: move),
+            reference: frame,
+            localPinPoint: current,
+            layoutSnapshot: layout
+        )
     }
 
-    private func enterRemote(virtualPoint: CGPoint, reference frame: KmFrame) -> KmFrame? {
-        let layout = layoutProvider()
+    private func enterRemote(virtualPoint: CGPoint,
+                             reference frame: KmFrame,
+                             localPinPoint: CGPoint? = nil,
+                             layoutSnapshot: Layout? = nil) -> KmFrame? {
+        let layout = layoutSnapshot ?? currentLayout()
         guard let target = layout.screen(at: Int(virtualPoint.x.rounded()), Int(virtualPoint.y.rounded())),
               target.peerId == remotePeerId
         else { return nil }
 
         isRemoteActive = true
+        activeLayoutSnapshot = layout
         remoteVirtualPoint = virtualPoint
-        let current = Self.currentCursorLocation()
+        let current = localPinPoint ?? Self.currentCursorLocation()
         pinnedLocalPoint = current
         guardController.start(pinnedAt: current)
 
@@ -374,7 +387,7 @@ private final class EdgeBridge {
         else { return false }
 
         let projected = CGPoint(x: remoteVirtualPoint.x + CGFloat(move.x), y: remoteVirtualPoint.y + CGFloat(move.y))
-        let target = layoutProvider().screen(at: Int(projected.x.rounded()), Int(projected.y.rounded()))
+        let target = (activeLayoutSnapshot ?? currentLayout()).screen(at: Int(projected.x.rounded()), Int(projected.y.rounded()))
         if target?.peerId == localPeerId {
             pinnedLocalPoint = projected
             return true
@@ -397,9 +410,21 @@ private final class EdgeBridge {
         if let pinnedLocalPoint {
             CGWarpMouseCursorPosition(pinnedLocalPoint)
         }
+        activeLayoutSnapshot = nil
         remoteVirtualPoint = nil
         pinnedLocalPoint = nil
         log(reason)
+    }
+
+    private func currentLayout() -> Layout {
+        let now = CFAbsoluteTimeGetCurrent()
+        if now - cachedLayoutAt <= Self.layoutCacheDuration {
+            return cachedLayout
+        }
+
+        cachedLayout = layoutProvider()
+        cachedLayoutAt = now
+        return cachedLayout
     }
 
     private func remoteNativePoint(for virtualPoint: CGPoint, in layoutScreen: ScreenRect) -> CGPoint {
@@ -436,4 +461,5 @@ private final class EdgeBridge {
     }
 
     private static let edgeEntryInset = 24
+    private static let layoutCacheDuration: CFTimeInterval = 0.20
 }

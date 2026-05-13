@@ -11,7 +11,7 @@ final class LanPeerScanner {
     private let queue = DispatchQueue(label: "com.barelyreal.lan-peer-scan", qos: .utility)
     private let resultLock = NSLock()
 
-    func scan(controlPort: UInt16, timeout: TimeInterval = 0.35, completion: @escaping ([String]) -> Void) {
+    func scan(controlPort: UInt16, timeout: TimeInterval = 0.22, completion: @escaping ([String]) -> Void) {
         let locals = Self.localPrivateIPv4Addresses()
         let candidates = Self.candidateHosts(from: locals)
 
@@ -21,7 +21,7 @@ final class LanPeerScanner {
         }
 
         let group = DispatchGroup()
-        let semaphore = DispatchSemaphore(value: 32)
+        let semaphore = DispatchSemaphore(value: 10)
         var found = Set<String>()
 
         for host in candidates {

@@ -54,6 +54,7 @@ public sealed class UdpKmStream : IDisposable
         _lastReplayDropLogUtc = DateTime.MinValue;
         ResetReplayProtection();
         _client = new UdpClient(new IPEndPoint(IPAddress.Any, localPort));
+        _client.Client.ReceiveBufferSize = Math.Max(_client.Client.ReceiveBufferSize, 1 * 1024 * 1024);
         _cts = new CancellationTokenSource();
         if (_sourceFilter.Enabled)
             LogLine?.Invoke($"UDP source filter enabled for {_sourceFilter.Description}");

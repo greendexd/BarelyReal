@@ -10,6 +10,7 @@ public final class EventTap {
     }
 
     public var onFrame: ((KmFrame) -> Void)?
+    public var onFrameWithLocation: ((KmFrame, CGPoint) -> Void)?
     public var onEmergencyReturn: (() -> Void)?
     public var suppressLocalEvents = false
     public var scrollSpeed: Int {
@@ -112,8 +113,13 @@ public final class EventTap {
             return nil
         }
 
+        let location = event.location
         for frame in frames(for: type, event: event) {
-            onFrame?(frame)
+            if let onFrameWithLocation {
+                onFrameWithLocation(frame, location)
+            } else {
+                onFrame?(frame)
+            }
         }
 
         return suppressLocalEvents ? nil : Unmanaged.passUnretained(event)

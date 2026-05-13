@@ -19,6 +19,8 @@ public sealed class InputInjector
     public bool AssumeMacVirtualKeyCodes { get; set; } = true;
     public Action<string>? Log { get; set; }
 
+    private readonly INPUT[] _singleInput = new INPUT[1];
+
     public void Inject(KmFrame frame)
     {
         switch (frame.Type)
@@ -269,13 +271,15 @@ public sealed class InputInjector
 
     private void Send(INPUT input)
     {
-        var inputs = new[] { input };
-        var sent = SendInput(1, inputs, Marshal.SizeOf<INPUT>());
+        _singleInput[0] = input;
+        var sent = SendInput(1, _singleInput, InputSize);
         if (sent != 1)
         {
             Log?.Invoke($"SendInput failed type={input.type} sent={sent} error={Marshal.GetLastWin32Error()}");
         }
     }
+
+    private static readonly int InputSize = Marshal.SizeOf<INPUT>();
 
     private const uint INPUT_MOUSE = 0;
     private const uint INPUT_KEYBOARD = 1;

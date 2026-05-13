@@ -44,10 +44,10 @@ public final class UdpKmStream {
     }
 
     public func send(_ frame: KmFrame, to peer: NWEndpoint) {
-        let encoded = KmFrameCodec.encode(frame)
-        let payload = authenticator?.seal(encoded) ?? encoded
         queue.async { [weak self] in
             guard let self else { return }
+            let encoded = KmFrameCodec.encode(frame)
+            let payload = self.authenticator?.seal(encoded) ?? encoded
             let connection = self.connection(to: peer)
             connection.send(content: payload, completion: .contentProcessed { _ in })
         }
