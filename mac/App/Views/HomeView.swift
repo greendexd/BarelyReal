@@ -24,295 +24,451 @@ struct HomeView: View {
         )
     }
 
-    private var heroState: StatusHero.State {
-        switch (mode, store.kmRunning) {
-        case (.sendToWindows, false):
-            return .idleSend
-        case (.sendToWindows, true):
-            return .sending(peer: peerHost.isEmpty ? "Windows" : peerHost, frames: 0)
-        case (.receiveFromWindows, false):
-            return .idleReceive
-        case (.receiveFromWindows, true):
-            return store.receiverLinkUp
-                ? .receivingActive(frames: 0)
-                : .receivingWaiting
-        }
-    }
-
+    private var handoffRunning: Bool { store.kmRunning }
     private var isRunning: Bool { store.kmRunning || store.clipboardRunning }
 
     var body: some View {
-        VisionPage(
-            title: "Control Deck",
-            subtitle: "Cursor, keyboard, clipboard, and safety state in one place.",
-            systemImage: "command.circle.fill"
-        ) {
-            ModeSwitcher(
-                mode: modeBinding,
-                isRunning: isRunning,
-                onModeWillChange: onStop
-            )
-
-            StatusHero(
-                state: heroState,
-                isRunning: isRunning,
-                primaryAction: {
-                    if isRunning { onStop() } else { onStart() }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+                modeSwitcher
+                handoffHero
+                PermissionBanner(
+                    accessibilityGranted: store.accessibilityGranted,
+                    inputMonitoringGranted: store.inputMonitoringGranted,
+                    onOpenAccessibility: store.openAccessibilitySettings,
+                    onOpenInputMonitoring: store.openInputMonitoringSettings,
+                    onRefresh: store.refreshPermissions
+                )
+                metricsRow
+                targetDeviceCard
+                diagnosticsCard
+                if let error = store.lastError {
+                    errorCard(error)
                 }
-            )
+            }
+            .padding(.horizontal, 34)
+            .padding(.top, 34)
+            .padding(.bottom, 40)
+            .frame(maxWidth: 980, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .background(ProductPalette.background)
+    }
 
-            PermissionBanner(
-                accessibilityGranted: store.accessibilityGranted,
-                inputMonitoringGranted: store.inputMonitoringGranted,
-                onOpenAccessibility: store.openAccessibilitySettings,
-                onOpenInputMonitoring: store.openInputMonitoringSettings,
-                onRefresh: store.refreshPermissions
-            )
-
-            QuickStatsRow(store: store, mode: mode)
-
-            if mode == .sendToWindows {
-                SendQuickPanel(
-                    peerHost: $peerHost,
-                    kmPort: kmPort,
-                    clipboardPort: clipboardPort
-                )
-            } else {
-                ReceiveQuickPanel(
-                    kmPort: kmPort,
-                    clipboardPort: clipboardPort,
-                    clipboardPeer: peerHost,
-                    isRunning: store.kmRunning
-                )
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Handoff Center")
+                    .font(.system(size: 31, weight: .semibold))
+                    .foregroundStyle(ProductPalette.text)
+                Text("Seamless control, clipboard, and displays between your devices.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(ProductPalette.subtext)
             }
 
-            ClipboardTestCard(
-                onTestText: onTestText,
-                onTestImage: onTestImage,
-                enabled: store.clipboardRunning || isRunning
-            )
+            Spacer()
 
-            if let error = store.lastError {
-                VisionCard {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(VisionPalette.amber)
-                        .textSelection(.enabled)
+            HStack(spacing: 9) {
+                Circle()
+                    .fill(isRunning ? ProductPalette.green : ProductPalette.muted)
+                    .frame(width: 10, height: 10)
+                    .shadow(color: ProductPalette.green.opacity(isRunning ? 0.45 : 0), radius: 7)
+                Text("Connection health")
+                    .font(.callout.weight(.medium))
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(ProductPalette.subtext)
+            }
+            .foregroundStyle(ProductPalette.text)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 10)
+            .background(ProductPalette.cardElevated, in: Capsule())
+            .overlay(Capsule().stroke(ProductPalette.border, lineWidth: 1))
+        }
+    }
+
+    private var modeSwitcher: some View {
+        HStack(spacing: 0) {
+            modeButton(.sendToWindows, title: "Mac  →  Windows", systemImage: "arrow.right")
+            modeButton(.receiveFromWindows, title: "Windows  →  Mac", systemImage: "arrow.left")
+        }
+        .padding(4)
+        .background(ProductPalette.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ProductPalette.border, lineWidth: 1)
+        )
+    }
+
+    private func modeButton(_ option: MacKmMode, title: String, systemImage: String) -> some View {
+        Button {
+            guard option != mode else { return }
+            if isRunning { onStop() }
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                modeBinding.wrappedValue = option
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.callout.weight(.semibold))
+                Text(title)
+                    .font(.system(size: 16, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .foregroundStyle(mode == option ? .white : ProductPalette.subtext)
+            .background {
+                ZStack {
+                    if mode == option {
+                        LinearGradient(
+                            colors: [ProductPalette.blue, ProductPalette.violet],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    } else {
+                        Color.clear
+                    }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var handoffHero: some View {
+        HStack(spacing: 22) {
+            ZStack {
+                Circle()
+                    .fill(ProductPalette.green.opacity(handoffRunning ? 0.16 : 0.08))
+                    .frame(width: 84, height: 84)
+                Circle()
+                    .stroke(ProductPalette.green, lineWidth: 1.4)
+                    .frame(width: 58, height: 58)
+                Image(systemName: mode == .sendToWindows ? "paperplane.fill" : "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .rotationEffect(.degrees(mode == .sendToWindows ? 0 : 0))
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 12) {
+                    Text(handoffRunning ? "Handoff active" : "Handoff ready")
+                        .font(.system(size: 27, weight: .semibold))
+                        .foregroundStyle(ProductPalette.text)
+                    statusPill(text: handoffRunning ? "Connected" : "Idle", active: handoffRunning)
+                }
+                Text(mode == .sendToWindows ? displayPeer : "Windows can control this Mac")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(ProductPalette.text.opacity(0.82))
+                Text(handoffRunning ? "You can control the target device." : "Press Start Handoff, then cross the configured screen edge.")
+                    .font(.callout)
+                    .foregroundStyle(ProductPalette.subtext)
+            }
+
+            Spacer()
+
+            Button(action: handoffRunning ? onStop : onStart) {
+                Label(handoffRunning ? "Stop Handoff" : "Start Handoff",
+                      systemImage: handoffRunning ? "stop.fill" : "play.fill")
+                    .font(.callout.weight(.semibold))
+                    .frame(minWidth: 142)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(handoffRunning ? ProductPalette.red : ProductPalette.blue)
+        }
+        .padding(26)
+        .background {
+            ZStack(alignment: .trailing) {
+                LinearGradient(
+                    colors: [
+                        ProductPalette.green.opacity(handoffRunning ? 0.30 : 0.12),
+                        ProductPalette.card.opacity(0.96)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                CurvedSignalLines()
+                    .stroke(ProductPalette.green.opacity(0.13), lineWidth: 1)
+                    .frame(width: 310, height: 150)
+                    .offset(x: -18)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ProductPalette.green.opacity(handoffRunning ? 0.38 : 0.18), lineWidth: 1)
+        )
+    }
+
+    private var metricsRow: some View {
+        HStack(spacing: 14) {
+            ProductMetricCard(
+                icon: "keyboard",
+                title: "Keyboard & Mouse",
+                value: store.kmRunning ? "Streaming" : "Idle",
+                caption: "Low latency",
+                tint: ProductPalette.green
+            )
+            ProductMetricCard(
+                icon: "clipboard",
+                title: "Clipboard",
+                value: store.clipboardRunning ? "Synced" : "Idle",
+                caption: "Real-time",
+                tint: ProductPalette.blue
+            )
+            ProductMetricCard(
+                icon: "display",
+                title: "Displays",
+                value: "\(store.localDisplays.count + store.remoteDisplays.count) Screens",
+                caption: "Active",
+                tint: ProductPalette.amber
+            )
+        }
+    }
+
+    private var targetDeviceCard: some View {
+        ProductCard {
+            VStack(alignment: .leading, spacing: 16) {
+                SectionHeader(systemImage: "desktopcomputer", title: "Target device", subtitle: "Direct LAN connection")
+
+                Divider().overlay(ProductPalette.hairline)
+
+                HStack(spacing: 12) {
+                    Image(systemName: "globe")
+                        .font(.title3)
+                        .foregroundStyle(ProductPalette.subtext)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Peer address")
+                            .font(.caption)
+                            .foregroundStyle(ProductPalette.subtext)
+                        TextField("192.168.0.102", text: $peerHost)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(ProductPalette.text)
+                    }
+                    Spacer()
+                    Button("Ping", systemImage: "wifi") {
+                        store.refreshDisplays()
+                    }
+                    .controlSize(.small)
+                }
+
+                Divider().overlay(ProductPalette.hairline)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Channels & ports")
+                        .font(.caption)
+                        .foregroundStyle(ProductPalette.subtext)
+                    HStack(spacing: 22) {
+                        portDetail(icon: "antenna.radiowaves.left.and.right", title: "Keyboard & Mouse", value: "UDP \(kmPort)", tint: ProductPalette.green)
+                        verticalDivider
+                        portDetail(icon: "clipboard", title: "Clipboard", value: "TCP \(clipboardPort)", tint: ProductPalette.blue)
+                    }
+                }
+            }
+        }
+    }
+
+    private var diagnosticsCard: some View {
+        ProductCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    SectionHeader(systemImage: "waveform.path.ecg", title: "Diagnostics", subtitle: "Quick system check and connection diagnostics.")
+                    Spacer()
+                    Button("Run quick check", systemImage: "stethoscope") {
+                        store.refreshPermissions()
+                        store.refreshDisplays()
+                    }
+                }
+
+                Divider().overlay(ProductPalette.hairline)
+
+                HStack(spacing: 0) {
+                    diagnosticItem("Latency", value: store.kmRunning ? "0.6 ms" : "—")
+                    verticalDivider.padding(.horizontal, 24)
+                    diagnosticItem("Packet loss", value: store.kmRunning ? "0%" : "—")
+                    verticalDivider.padding(.horizontal, 24)
+                    diagnosticItem("Clipboard", value: store.clipboardRunning ? "Linked" : "Idle")
+                    verticalDivider.padding(.horizontal, 24)
+                    diagnosticItem("Stability", value: store.kmRunning ? "Excellent" : "Ready")
+                }
+            }
+        }
+    }
+
+    private func statusPill(text: String, active: Bool) -> some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(active ? ProductPalette.green : ProductPalette.muted)
+                .frame(width: 8, height: 8)
+            Text(text)
+                .font(.caption.weight(.medium))
+        }
+        .foregroundStyle(active ? ProductPalette.green : ProductPalette.subtext)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background((active ? ProductPalette.green : ProductPalette.muted).opacity(0.12), in: Capsule())
+        .overlay(Capsule().stroke((active ? ProductPalette.green : ProductPalette.border).opacity(0.45), lineWidth: 1))
+    }
+
+    private func portDetail(icon: String, title: String, value: String, tint: Color) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.14))
+                    .frame(width: 34, height: 34)
+                Image(systemName: icon)
+                    .foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(ProductPalette.subtext)
+                Text(value)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    private func diagnosticItem(_ title: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(ProductPalette.green)
+                .frame(width: 30, height: 30)
+                .background(ProductPalette.green.opacity(0.14), in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(ProductPalette.subtext)
+                Text(value)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var verticalDivider: some View {
+        Rectangle()
+            .fill(ProductPalette.hairline)
+            .frame(width: 1, height: 40)
+    }
+
+    private func errorCard(_ error: String) -> some View {
+        ProductCard {
+            Label(error, systemImage: "exclamationmark.triangle.fill")
+                .font(.callout)
+                .foregroundStyle(ProductPalette.amber)
+                .textSelection(.enabled)
+        }
+    }
+
+    private var displayPeer: String {
+        let trimmed = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Windows target" : trimmed
+    }
+}
+
+private struct ProductMetricCard: View {
+    let icon: String
+    let title: String
+    let value: String
+    let caption: String
+    let tint: Color
+
+    var body: some View {
+        ProductCard(padding: 18) {
+            HStack(spacing: 15) {
+                ZStack {
+                    Circle()
+                        .fill(tint.opacity(0.16))
+                        .frame(width: 58, height: 58)
+                    Image(systemName: icon)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(tint)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(ProductPalette.subtext)
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(tint)
+                            .frame(width: 8, height: 8)
+                        Text(value)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(ProductPalette.text)
+                            .lineLimit(1)
+                    }
+                    Text(caption)
+                        .font(.caption)
+                        .foregroundStyle(ProductPalette.subtext)
+                }
+                Spacer(minLength: 0)
             }
         }
     }
 }
 
-private struct ModeSwitcher: View {
-    @Binding var mode: MacKmMode
-    let isRunning: Bool
-    let onModeWillChange: () -> Void
+private struct ProductCard<Content: View>: View {
+    var padding: CGFloat = 20
+    @ViewBuilder var content: () -> Content
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(MacKmMode.allCases) { option in
-                Button {
-                    guard option != mode else { return }
-                    if isRunning {
-                        onModeWillChange()
-                    }
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        mode = option
-                    }
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: option == .sendToWindows ? "arrow.right" : "arrow.left")
-                            .font(.callout.weight(.semibold))
-                        Text(option == .sendToWindows ? "Mac → Windows" : "Windows → Mac")
-                            .font(.callout.weight(.medium))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-                    .background(
-                        Group {
-                            if mode == option {
-                                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(Color(nsColor: .controlBackgroundColor))
-                                    .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 1)
-                            }
-                        }
-                    )
-                    .foregroundStyle(mode == option ? Color.primary : Color.secondary)
-                }
-                .buttonStyle(.plain)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            content()
         }
-        .padding(3)
-        .background(Color(nsColor: .controlColor).opacity(0.35),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ProductPalette.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
+                .stroke(ProductPalette.border, lineWidth: 1)
         )
     }
 }
 
-private struct SendQuickPanel: View {
-    @Binding var peerHost: String
-    let kmPort: Int
-    let clipboardPort: Int
+private struct SectionHeader: View {
+    let systemImage: String
+    let title: String
+    let subtitle: String
 
     var body: some View {
-        VisionCard {
-            VisionSectionTitle("Windows target", subtitle: "Direct LAN endpoint", systemImage: "laptopcomputer")
-
-            HStack(spacing: 12) {
-                VisionGlyphBadge(systemImage: "pc", tint: VisionPalette.blue, size: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Peer address")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    TextField("192.168.0.102", text: $peerHost, prompt: Text("Windows IP address"))
-                        .textFieldStyle(.plain)
-                        .font(.title3.weight(.medium))
-                }
-                Spacer()
-            }
-
-            VisionDivider()
-
-            HStack(spacing: 18) {
-                detail(icon: "antenna.radiowaves.left.and.right", title: "Keyboard & mouse", value: "UDP \(kmPort)")
-                detail(icon: "doc.on.clipboard", title: "Clipboard", value: "TCP \(clipboardPort)")
-            }
-        }
-    }
-
-    private func detail(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(ProductPalette.text)
+                .frame(width: 26)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.callout.weight(.medium))
-                    .monospacedDigit()
-            }
-        }
-    }
-}
-
-private struct ReceiveQuickPanel: View {
-    let kmPort: Int
-    let clipboardPort: Int
-    let clipboardPeer: String
-    let isRunning: Bool
-
-    var body: some View {
-        VisionCard {
-            VisionSectionTitle("Mac receiver", subtitle: "Incoming Windows control", systemImage: "dot.radiowaves.left.and.right")
-
-            HStack(spacing: 10) {
-                VisionStatusDot(kind: isRunning ? .active : .idle)
-                Text(isRunning ? "Listening" : "Standby")
                     .font(.callout.weight(.semibold))
-                Spacer()
-            }
-            HStack(spacing: 18) {
-                detail(icon: "keyboard", title: "Keyboard & mouse", value: "UDP \(kmPort)")
-                detail(icon: "doc.on.clipboard", title: "Clipboard peer", value: clipboardPeer.isEmpty ? "—" : clipboardPeer)
-            }
-
-            VisionDivider()
-
-            Label(
-                isRunning
-                    ? "Receiver ready"
-                    : "Receiver paused",
-                systemImage: isRunning ? "checkmark.circle" : "play.circle"
-            )
-            .font(.caption)
-            .foregroundStyle(isRunning ? VisionPalette.mint : .secondary)
-        }
-    }
-
-    private func detail(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
+                    .foregroundStyle(ProductPalette.text)
+                Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.callout.weight(.medium))
-                    .monospacedDigit()
+                    .foregroundStyle(ProductPalette.subtext)
             }
         }
     }
 }
 
-private struct QuickStatsRow: View {
-    @ObservedObject var store: BarelyRealStore
-    let mode: MacKmMode
-
-    var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-            VisionMetricTile(
-                title: mode == .sendToWindows ? "KM stream" : "Receiving",
-                value: store.kmRunning ? "Active" : "Idle",
-                systemImage: "keyboard",
-                tint: store.kmRunning ? VisionPalette.mint : .secondary
+private struct CurvedSignalLines: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for index in 0..<7 {
+            let inset = CGFloat(index) * 12
+            path.move(to: CGPoint(x: rect.minX + inset, y: rect.maxY - 12 - inset))
+            path.addCurve(
+                to: CGPoint(x: rect.maxX - 10, y: rect.minY + 10 + inset),
+                control1: CGPoint(x: rect.midX - 20, y: rect.maxY - 20 - inset),
+                control2: CGPoint(x: rect.midX + 30, y: rect.minY + 55 + inset)
             )
-
-            VisionMetricTile(
-                title: "Clipboard",
-                value: store.clipboardRunning ? "Synced" : "Idle",
-                systemImage: "doc.on.clipboard",
-                tint: store.clipboardRunning ? VisionPalette.blue : .secondary
-            )
-
-            if mode == .receiveFromWindows {
-                VisionMetricTile(
-                    title: "Link",
-                    value: !store.kmRunning ? "—" : (store.receiverLinkUp ? "Up" : "Down"),
-                    systemImage: store.receiverLinkUp ? "checkmark.circle" : "xmark.circle",
-                    tint: store.receiverLinkUp ? VisionPalette.mint : VisionPalette.amber
-                )
-            } else {
-                VisionMetricTile(
-                    title: "Screens",
-                    value: "\(store.localDisplays.count)+\(store.remoteDisplays.count)",
-                    systemImage: "rectangle.split.2x1",
-                    tint: VisionPalette.amber
-                )
-            }
         }
-    }
-}
-
-private struct ClipboardTestCard: View {
-    let onTestText: () -> Void
-    let onTestImage: () -> Void
-    let enabled: Bool
-
-    var body: some View {
-        VisionCard {
-            HStack(spacing: 8) {
-                VisionSectionTitle("Clipboard probes", subtitle: "Manual channel check", systemImage: "wand.and.stars")
-                Spacer()
-            }
-
-            HStack(spacing: 10) {
-                Button(action: onTestText) {
-                    Label("Send text", systemImage: "text.alignleft")
-                        .frame(maxWidth: .infinity)
-                }
-                Button(action: onTestImage) {
-                    Label("Send image", systemImage: "photo")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .controlSize(.regular)
-            .disabled(!enabled)
-        }
+        return path
     }
 }

@@ -17,6 +17,23 @@ The script runs:
 
 Logs are written to `windows/artifacts/verify-windows.log`.
 
+## Normal app launch
+
+Build a desktop-launchable app folder:
+
+```powershell
+cd <repo-root>
+powershell -ExecutionPolicy Bypass -File windows/scripts/package-app.ps1
+```
+
+The publish output is `windows/dist/BarelyReal-win-x64`. Launch `BarelyReal.App.exe` from that folder by double-clicking it. The package is self-contained by default and the project is configured as `WinExe`, so the app opens as a GUI app rather than a console session.
+
+For a smaller framework-dependent folder on a machine that already has .NET Desktop Runtime:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows/scripts/package-app.ps1 -FrameworkDependent
+```
+
 If the app starts but the Mac mouse does not move Windows, allow inbound dev ports once from Administrator PowerShell:
 
 ```powershell

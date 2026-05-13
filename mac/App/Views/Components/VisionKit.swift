@@ -1,10 +1,10 @@
 import SwiftUI
 
 enum VisionPalette {
-    static let blue = Color(red: 0.16, green: 0.46, blue: 0.96)
-    static let mint = Color(red: 0.08, green: 0.62, blue: 0.48)
-    static let amber = Color(red: 0.95, green: 0.58, blue: 0.18)
-    static let red = Color(red: 0.86, green: 0.20, blue: 0.25)
+    static let blue = ProductPalette.blue
+    static let mint = ProductPalette.green
+    static let amber = ProductPalette.amber
+    static let red = ProductPalette.red
 }
 
 struct VisionPage<Content: View>: View {
@@ -19,12 +19,12 @@ struct VisionPage<Content: View>: View {
                 VisionHeader(title: title, subtitle: subtitle, systemImage: systemImage)
                 content()
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
+            .padding(.horizontal, 34)
+            .padding(.vertical, 34)
             .frame(maxWidth: 920, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(ProductPalette.background)
     }
 }
 
@@ -40,9 +40,10 @@ struct VisionHeader: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.title2.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
                 Text(subtitle)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ProductPalette.subtext)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -61,11 +62,11 @@ struct VisionCard<Content: View>: View {
         }
         .padding(padding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor),
+        .background(ProductPalette.card,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
+                .stroke(ProductPalette.border, lineWidth: 1)
         )
     }
 }
@@ -84,15 +85,16 @@ struct VisionSectionTitle: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 9) {
             Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ProductPalette.subtext)
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
                 if let subtitle {
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ProductPalette.subtext)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -129,7 +131,7 @@ struct VisionStatusDot: View {
 
         var color: Color {
             switch self {
-            case .idle: .secondary
+            case .idle: ProductPalette.muted
             case .active: VisionPalette.mint
             case .warning: VisionPalette.amber
             case .danger: VisionPalette.red
@@ -159,9 +161,10 @@ struct VisionMetricTile: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ProductPalette.subtext)
                 Text(value)
                     .font(.callout.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
                     .monospacedDigit()
                     .lineLimit(1)
             }
@@ -169,15 +172,19 @@ struct VisionMetricTile: View {
         }
         .padding(12)
         .frame(minHeight: 62)
-        .background(Color(nsColor: .separatorColor).opacity(0.12),
+        .background(ProductPalette.cardElevated.opacity(0.82),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ProductPalette.border, lineWidth: 1)
+        )
     }
 }
 
 struct VisionDivider: View {
     var body: some View {
         Rectangle()
-            .fill(.quaternary)
+            .fill(ProductPalette.hairline)
             .frame(height: 1)
     }
 }

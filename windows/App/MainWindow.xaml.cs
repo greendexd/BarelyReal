@@ -106,19 +106,38 @@ public partial class MainWindow : Window
         if (HomePage is null) return; // not yet loaded
 
         var home = NavHome?.IsChecked == true;
+        var displays = NavDisplays?.IsChecked == true;
         var clipboard = NavClipboard?.IsChecked == true;
         var activity = NavActivity?.IsChecked == true;
         var settings = NavSettings?.IsChecked == true;
 
         HomePage.Visibility     = home      ? Visibility.Visible : Visibility.Collapsed;
+        if (DisplaysPage is not null)  DisplaysPage.Visibility  = displays  ? Visibility.Visible : Visibility.Collapsed;
         if (ClipboardPage is not null) ClipboardPage.Visibility = clipboard ? Visibility.Visible : Visibility.Collapsed;
         if (ActivityPage is not null)  ActivityPage.Visibility  = activity  ? Visibility.Visible : Visibility.Collapsed;
         if (SettingsPage is not null)  SettingsPage.Visibility  = settings  ? Visibility.Visible : Visibility.Collapsed;
 
         if (PageTitleText is not null)
-            PageTitleText.Text = home ? "Home" : (clipboard ? "Clipboard" : (activity ? "Activity" : "Settings"));
+            PageTitleText.Text = home
+                ? "Handoff Center"
+                : displays ? "Displays"
+                : clipboard ? "Clipboard"
+                : activity ? "Telemetry"
+                : "System";
 
         if (clipboard) RefreshClipboardHistory();
+    }
+
+    private void SidebarSettings_Click(object sender, RoutedEventArgs e)
+    {
+        if (NavSettings is not null)
+            NavSettings.IsChecked = true;
+    }
+
+    private void SidebarHelp_Click(object sender, RoutedEventArgs e)
+    {
+        if (NavActivity is not null)
+            NavActivity.IsChecked = true;
     }
 
     private void RefreshClipboardHistory_Click(object sender, RoutedEventArgs e)
@@ -650,12 +669,12 @@ public partial class MainWindow : Window
     {
         return trustState switch
         {
-            PairingService.TrustState.Trusted => "Trusted in dev pairing scaffold",
-            PairingService.TrustState.KeyChanged => "Key changed; re-pair before starting",
-            PairingService.TrustState.Unpaired => "Unpaired; trust this peer before starting",
+            PairingService.TrustState.Trusted => "Trusted",
+            PairingService.TrustState.KeyChanged => "Key changed; re-pair required",
+            PairingService.TrustState.Unpaired => "Unpaired",
             _ => !hasFingerprint
                 ? "Peer has no fingerprint advertised"
-                : isDevPlaceholder ? "Peer advertises legacy dev placeholder" : "Unknown key"
+                : isDevPlaceholder ? "Peer advertises legacy placeholder" : "Unknown key"
         };
     }
 
@@ -889,16 +908,16 @@ public partial class MainWindow : Window
         {
             if (running)
             {
-                HeroTitle.Text = "Sharing keyboard & mouse";
+                HeroTitle.Text = "Handoff active";
                 HeroSubtitle.Text = $"Streaming to {_sender.PeerHost}. Move cursor past the screen edge to enter Mac.";
-                HeroIcon.Text = "✈";
+                HeroIcon.Text = "●";
                 ApplyHeroTint("AccentBrush", "AccentSoftBrush");
             }
             else
             {
-                HeroTitle.Text = "Ready to share with Mac";
-                HeroSubtitle.Text = "Move your cursor past the screen edge to control the other machine.";
-                HeroIcon.Text = "↑";
+                HeroTitle.Text = "Ready for Windows-to-Mac handoff";
+                HeroSubtitle.Text = "Target device and display edge are staged.";
+                HeroIcon.Text = "●";
                 ApplyHeroTint(null, null);
             }
         }
@@ -906,23 +925,23 @@ public partial class MainWindow : Window
         {
             if (!running)
             {
-                HeroTitle.Text = "Ready to receive from Mac";
-                HeroSubtitle.Text = "Listening for incoming keyboard and mouse.";
-                HeroIcon.Text = "↓";
+                HeroTitle.Text = "Ready for Mac-to-Windows handoff";
+                HeroSubtitle.Text = "Keyboard, mouse, and clipboard routing are staged for this Windows device.";
+                HeroIcon.Text = "●";
                 ApplyHeroTint(null, null);
             }
             else if (linkUp)
             {
-                HeroTitle.Text = "Connected";
+                HeroTitle.Text = "Handoff active";
                 HeroSubtitle.Text = "Receiving keyboard and mouse from Mac.";
-                HeroIcon.Text = "✓";
+                HeroIcon.Text = "●";
                 ApplyHeroTint("SuccessBrush", "SuccessSoftBrush");
             }
             else
             {
-                HeroTitle.Text = "Waiting for Mac…";
+                HeroTitle.Text = "Waiting for Mac";
                 HeroSubtitle.Text = "Make sure the Mac app is sending KM frames to this PC.";
-                HeroIcon.Text = "◐";
+                HeroIcon.Text = "●";
                 ApplyHeroTint("WarningBrush", "WarningSoftBrush");
             }
         }

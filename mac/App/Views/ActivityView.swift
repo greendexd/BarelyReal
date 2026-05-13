@@ -34,13 +34,13 @@ struct ActivityView: View {
                             VStack(spacing: 8) {
                                 Image(systemName: "tray")
                                     .font(.largeTitle)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(ProductPalette.subtext)
                                 Text("No events yet")
                                     .font(.callout)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(ProductPalette.subtext)
                                 Text("Start a session and you'll see traffic here.")
                                     .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(ProductPalette.muted)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.top, 60)
@@ -49,7 +49,7 @@ struct ActivityView: View {
                                 EventRow(line: line)
                                     .background(index.isMultiple(of: 2)
                                                 ? Color.clear
-                                                : Color(nsColor: .controlBackgroundColor).opacity(0.45))
+                                                : ProductPalette.card.opacity(0.45))
                                     .id(index)
                             }
                         }
@@ -63,6 +63,6 @@ struct ActivityView: View {
                 }
             }
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(ProductPalette.background)
     }
 }

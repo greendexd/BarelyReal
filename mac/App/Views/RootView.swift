@@ -11,31 +11,31 @@ enum AppSection: Hashable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: "Control"
-        case .devices: "Layout"
+        case .home: "Handoff"
+        case .devices: "Displays"
         case .clipboard: "Clipboard"
         case .activity: "Telemetry"
-        case .settings: "Systems"
+        case .settings: "System"
         }
     }
 
     var icon: String {
         switch self {
-        case .home: "command.circle.fill"
-        case .devices: "macbook.and.iphone"
-        case .clipboard: "doc.on.clipboard"
-        case .activity: "waveform"
-        case .settings: "gearshape.fill"
+        case .home: "bolt"
+        case .devices: "desktopcomputer"
+        case .clipboard: "clipboard"
+        case .activity: "waveform.path.ecg"
+        case .settings: "gearshape"
         }
     }
 
     var detail: String {
         switch self {
-        case .home: "handoff"
-        case .devices: "monitors"
-        case .clipboard: "shared"
-        case .activity: "logs"
-        case .settings: "ports"
+        case .home: "Control devices"
+        case .devices: "Manage screens"
+        case .clipboard: "Shared history"
+        case .activity: "System logs"
+        case .settings: "Ports & settings"
         }
     }
 }
@@ -57,57 +57,22 @@ struct RootView: View {
     @State private var selection: AppSection = .home
 
     var body: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                sidebarHeader
-                List(AppSection.allCases, selection: $selection) { section in
-                    NavigationLink(value: section) {
-                        HStack(spacing: 10) {
-                            Image(systemName: section.icon)
-                                .foregroundStyle(.secondary)
-                                .frame(width: 17)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(section.title)
-                                    .lineLimit(1)
-                                Text(section.detail)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.vertical, 2)
-                    }
-                }
-                .listStyle(.sidebar)
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
-            .toolbar(removing: .sidebarToggle)
-            .safeAreaInset(edge: .bottom) {
-                sidebarFooter
-            }
-        } detail: {
+        HStack(spacing: 0) {
+            sidebar
+                .frame(width: 232)
+                .background(ProductPalette.sidebar)
+
+            Rectangle()
+                .fill(ProductPalette.hairline)
+                .frame(width: 1)
+
             detailView
-                .navigationSplitViewColumnWidth(min: 560, ideal: 760)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(ProductPalette.background)
         }
-        .navigationTitle("BarelyReal")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    Image(systemName: "rectangle.connected.to.line.below")
-                        .foregroundStyle(VisionPalette.blue)
-                    Text("Codex Vision")
-                        .font(.headline)
-                    Text("BarelyReal")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
-                statusToolbarBadge
-            }
-        }
+        .frame(minWidth: 1120, minHeight: 760)
+        .background(ProductPalette.background)
         .onAppear {
-            // Sync persisted toggle into the receiver session.
             store.setLockOnDisconnect(lockOnDisconnect)
             store.onSuggestedPeerHost = { host in
                 let current = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,8 +85,6 @@ struct RootView: View {
             store.onSuggestedPeerHost = nil
         }
     }
-
-    // MARK: - Detail
 
     @ViewBuilder
     private var detailView: some View {
@@ -162,64 +125,73 @@ struct RootView: View {
         }
     }
 
-    // MARK: - Sidebar accessories
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            brandBlock
+                .padding(.top, 54)
+                .padding(.bottom, 34)
 
-    private var sidebarHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
+            VStack(spacing: 8) {
+                ForEach(AppSection.allCases) { section in
+                    SidebarButton(
+                        section: section,
+                        isSelected: selection == section,
+                        action: { selection = section }
+                    )
+                }
+            }
+            .padding(.horizontal, 10)
+
+            Spacer(minLength: 24)
+
+            SidebarSessionCard(store: store)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 20)
+
             HStack(spacing: 10) {
-                VisionGlyphBadge(systemImage: "cursorarrow.motionlines", tint: VisionPalette.blue, size: 34)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Codex Vision")
-                        .font(.headline)
-                    Text("shared desktop")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                BottomIconButton(systemImage: "gearshape") {
+                    selection = .settings
+                }
+                BottomIconButton(systemImage: "questionmark.circle") {
+                    selection = .activity
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 14)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 18)
         }
     }
 
-    private var sidebarFooter: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    VisionStatusDot(kind: store.kmRunning ? .active : .idle)
-                    Text(store.kmRunning ? "Session active" : "Ready")
-                        .font(.caption.weight(.medium))
-                    Spacer()
-                }
-                HStack(spacing: 8) {
-                    Image(systemName: store.clipboardRunning ? "doc.on.clipboard.fill" : "doc.on.clipboard")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 12)
-                    Text(store.clipboardRunning ? "Clipboard linked" : "Clipboard idle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
+    private var brandBlock: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [ProductPalette.blue, ProductPalette.violet],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 56, height: 56)
+                    .shadow(color: ProductPalette.blue.opacity(0.35), radius: 18, y: 8)
+                Image(systemName: "display.2")
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+            }
+
+            VStack(spacing: 4) {
+                Text("BarelyReal")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(ProductPalette.text)
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(store.kmRunning || store.clipboardRunning ? ProductPalette.green : ProductPalette.muted)
+                        .frame(width: 8, height: 8)
+                    Text(store.kmRunning || store.clipboardRunning ? "Connected" : "Ready")
+                        .font(.callout)
+                        .foregroundStyle(ProductPalette.subtext)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
         }
     }
-
-    private var statusToolbarBadge: some View {
-        HStack(spacing: 6) {
-            VisionStatusDot(kind: store.kmRunning ? .active : .idle)
-            Text(store.kmRunning ? "Connected" : "Idle")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(.quaternary, in: Capsule())
-    }
-
-    // MARK: - Helpers
 
     private var currentSettings: ConnectionSettings {
         ConnectionSettings(
@@ -236,4 +208,115 @@ struct RootView: View {
     private func start() {
         store.start(settings: currentSettings)
     }
+}
+
+private struct SidebarButton: View {
+    let section: AppSection
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 15) {
+                Image(systemName: section.icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(isSelected ? .white : ProductPalette.subtext)
+                    .frame(width: 26)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(section.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(ProductPalette.text)
+                    Text(section.detail)
+                        .font(.caption)
+                        .foregroundStyle(ProductPalette.subtext)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? ProductPalette.selectedRow : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isSelected ? ProductPalette.border : .clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct SidebarSessionCard: View {
+    @ObservedObject var store: BarelyRealStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 10) {
+                Image(systemName: store.kmRunning ? "checkmark.circle" : "circle")
+                    .foregroundStyle(store.kmRunning ? ProductPalette.green : ProductPalette.muted)
+                Text(store.kmRunning ? "Session active" : "Session idle")
+                    .font(.caption.weight(.medium))
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(ProductPalette.muted)
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "link")
+                    .foregroundStyle(ProductPalette.muted)
+                Text(store.clipboardRunning ? "Clipboard linked" : "Clipboard idle")
+                    .font(.caption)
+                    .foregroundStyle(ProductPalette.subtext)
+            }
+        }
+        .foregroundStyle(ProductPalette.text)
+        .padding(16)
+        .background(ProductPalette.card.opacity(0.88), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ProductPalette.border, lineWidth: 1)
+        )
+    }
+}
+
+private struct BottomIconButton: View {
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(ProductPalette.subtext)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(ProductPalette.card, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(ProductPalette.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+enum ProductPalette {
+    static let background = Color(red: 0.045, green: 0.065, blue: 0.095)
+    static let sidebar = Color(red: 0.055, green: 0.075, blue: 0.110)
+    static let card = Color(red: 0.075, green: 0.100, blue: 0.145)
+    static let cardElevated = Color(red: 0.095, green: 0.125, blue: 0.175)
+    static let selectedRow = Color.white.opacity(0.085)
+    static let border = Color.white.opacity(0.125)
+    static let hairline = Color.white.opacity(0.10)
+    static let text = Color(red: 0.93, green: 0.96, blue: 1.0)
+    static let subtext = Color(red: 0.66, green: 0.71, blue: 0.78)
+    static let muted = Color(red: 0.45, green: 0.50, blue: 0.58)
+    static let blue = Color(red: 0.15, green: 0.37, blue: 0.95)
+    static let violet = Color(red: 0.33, green: 0.20, blue: 0.82)
+    static let green = Color(red: 0.25, green: 0.90, blue: 0.43)
+    static let amber = Color(red: 0.96, green: 0.66, blue: 0.20)
+    static let red = Color(red: 0.92, green: 0.18, blue: 0.22)
 }

@@ -15,7 +15,6 @@ struct DevicesView: View {
             systemImage: "rectangle.split.2x1"
         ) {
             deviceCard
-            pairingCard
             wakeOnLanCard
             pendingFeaturesNote
         }
@@ -328,7 +327,7 @@ struct DevicesView: View {
             Label("Coming next", systemImage: "sparkles")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(.secondary)
-            Text("• PIN-based pairing with key pinning\n• More than one remote peer")
+            Text("• Secure release pairing\n• More than one remote peer")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)

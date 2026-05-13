@@ -19,9 +19,10 @@ struct ClipboardHistoryView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Clipboard")
                         .font(.title2.weight(.semibold))
+                        .foregroundStyle(ProductPalette.text)
                     Text("\(store.clipboardEntries.count) recent shared items")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ProductPalette.subtext)
                 }
                 Spacer()
                 Button("Refresh", systemImage: "arrow.clockwise", action: store.loadClipboardHistory)
@@ -39,13 +40,13 @@ struct ClipboardHistoryView: View {
                     VStack(spacing: 8) {
                         Image(systemName: "doc.on.clipboard")
                             .font(.largeTitle)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ProductPalette.subtext)
                         Text("No clipboard items yet")
                             .font(.callout)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ProductPalette.subtext)
                         Text("Copy something on either machine — items will appear here.")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(ProductPalette.muted)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 60)
@@ -59,7 +60,7 @@ struct ClipboardHistoryView: View {
                 }
             }
         }
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(ProductPalette.background)
         .onAppear { store.loadClipboardHistory() }
     }
 }
@@ -75,24 +76,25 @@ private struct HistoryRow: View {
                 HStack(spacing: 8) {
                     Text(kindLabel)
                         .font(.callout.weight(.semibold))
+                        .foregroundStyle(ProductPalette.text)
                     Text(formattedDate)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ProductPalette.subtext)
                     Spacer()
                     Text(byteSize)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(ProductPalette.muted)
                 }
                 preview
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor),
+        .background(ProductPalette.card,
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
+                .stroke(ProductPalette.border, lineWidth: 1)
         )
     }
 
@@ -101,7 +103,7 @@ private struct HistoryRow: View {
         if let text = textPreview {
             Text(text)
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ProductPalette.subtext)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .textSelection(.enabled)
@@ -114,7 +116,7 @@ private struct HistoryRow: View {
         } else if let json = entry.formats["application/x-barelyreal-files"] {
             Text(filesPreview(from: json))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ProductPalette.subtext)
         }
     }
 
