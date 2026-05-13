@@ -616,19 +616,72 @@
                                     </StackPanel>
                                 </WrapPanel>
 
-                                <StackPanel Visibility="Collapsed">
-                                    <TextBlock x:Name="TrustStatusText" Text="No peer selected" />
-                                    <ComboBox x:Name="PairingPeerCombo" DisplayMemberPath="DisplayText" />
-                                    <TextBlock x:Name="PeerFingerprintText" Text="No discovered peer selected" />
-                                    <TextBlock x:Name="LocalFingerprintText" Text="loading..." />
-                                    <TextBlock x:Name="DevPinText" Text="------" />
-                                    <Button x:Name="TrustPeerButton"
-                                            Content="Trust Device"
-                                            Click="TrustPeerButton_Click" />
-                                    <Button x:Name="UnpinPeerButton"
-                                            Content="Remove Trust"
-                                            Click="UnpinPeerButton_Click" />
-                                </StackPanel>
+                                <Border Margin="0,14,0,0" Padding="14" CornerRadius="8" Background="#101722" BorderBrush="{StaticResource BorderBrushFaint}" BorderThickness="1">
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="False" Margin="0,0,0,12">
+                                            <StackPanel DockPanel.Dock="Left">
+                                                <TextBlock Text="Discovered devices" FontWeight="SemiBold" FontSize="15" />
+                                                <TextBlock x:Name="DiscoveryCountText"
+                                                           Text="Searching on LAN"
+                                                           Foreground="{StaticResource MutedBrush}"
+                                                           FontSize="12"
+                                                           Margin="0,3,0,0"
+                                                           TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button DockPanel.Dock="Right"
+                                                    x:Name="UseSelectedPeerButton"
+                                                    Content="Use selected Mac"
+                                                    Style="{StaticResource PrimaryButton}"
+                                                    Padding="14,5"
+                                                    MinHeight="30"
+                                                    Click="UseSelectedPeerButton_Click" />
+                                        </DockPanel>
+
+                                        <WrapPanel>
+                                            <StackPanel Width="320" Margin="0,0,12,12">
+                                                <TextBlock Text="Peer" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                                <ComboBox x:Name="PairingPeerCombo" DisplayMemberPath="DisplayText" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Width="190" Margin="0,0,12,12">
+                                                <TextBlock Text="Trust" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                                <TextBlock x:Name="TrustStatusText" Text="No peer selected" FontWeight="SemiBold" Margin="0,8,0,0" />
+                                            </StackPanel>
+                                            <StackPanel Width="240" Margin="0,0,0,12">
+                                                <TextBlock Text="Dev pairing PIN" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                                <TextBlock x:Name="DevPinText" Text="------" FontFamily="Cascadia Mono, Consolas" FontSize="20" FontWeight="SemiBold" Margin="0,4,0,0" />
+                                            </StackPanel>
+                                        </WrapPanel>
+
+                                        <Grid Margin="0,2,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Local fingerprint" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                                <TextBlock x:Name="LocalFingerprintText" Text="loading..." FontFamily="Cascadia Mono, Consolas" FontSize="11" TextWrapping="Wrap" Margin="0,3,12,0" />
+                                                <TextBlock Text="Peer fingerprint" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,10,0,0" />
+                                                <TextBlock x:Name="PeerFingerprintText" Text="No discovered peer selected" FontFamily="Cascadia Mono, Consolas" FontSize="11" TextWrapping="Wrap" Margin="0,3,12,0" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1"
+                                                    x:Name="TrustPeerButton"
+                                                    Content="Trust Device"
+                                                    Click="TrustPeerButton_Click"
+                                                    Padding="12,5"
+                                                    MinHeight="30"
+                                                    Margin="0,0,8,0"
+                                                    VerticalAlignment="Top" />
+                                            <Button Grid.Column="2"
+                                                    x:Name="UnpinPeerButton"
+                                                    Content="Remove Trust"
+                                                    Click="UnpinPeerButton_Click"
+                                                    Padding="12,5"
+                                                    MinHeight="30"
+                                                    VerticalAlignment="Top" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </Border>
                     </StackPanel>

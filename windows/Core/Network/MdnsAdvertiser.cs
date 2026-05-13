@@ -171,6 +171,18 @@ public sealed class MdnsBrowser : IDisposable
         }
     }
 
+    private void QueryAddress(DomainName hostName)
+    {
+        try
+        {
+            _discovery?.Mdns.SendQuery(hostName, DnsClass.IN, DnsType.A);
+        }
+        catch
+        {
+            // Address answers are often included with SRV; this query only improves sparse responders.
+        }
+    }
+
     private void HandleAnswer(Makaretu.Dns.Message message)
     {
         var records = message.Answers
@@ -193,6 +205,7 @@ public sealed class MdnsBrowser : IDisposable
                 peer.Port = srv.Port;
                 peer.LastSeenUtc = DateTime.UtcNow;
                 peer.ExplicitlyStale = srv.TTL == TimeSpan.Zero;
+                QueryAddress(srv.Target);
                 changed = true;
             }
 

@@ -112,7 +112,7 @@ struct SettingsView: View {
                     Button("Request Input Monitoring", action: store.requestInputMonitoring)
                     Spacer()
                     Button(role: .destructive, action: store.resetBarelyRealPermissions) {
-                        Text("Reset")
+                        Text("Reset & Restart")
                     }
                 }
                 .controlSize(.small)

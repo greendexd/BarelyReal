@@ -55,6 +55,7 @@ struct RootView: View {
     @AppStorage("connection.peerBroadcast") private var peerBroadcast = "192.168.0.255"
 
     @State private var selection: AppSection = .home
+    @State private var lastAutoAppliedPeerHost = ""
 
     var body: some View {
         GeometryReader { proxy in
@@ -79,11 +80,9 @@ struct RootView: View {
         .onAppear {
             store.setLockOnDisconnect(lockOnDisconnect)
             store.onSuggestedPeerHost = { host in
-                let current = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
-                if current.isEmpty || current == "192.168.0.102" {
-                    peerHost = host
-                }
+                applySuggestedPeerHost(host)
             }
+            applySuggestedPeerHost(store.suggestedPeerHost)
         }
         .onDisappear {
             store.onSuggestedPeerHost = nil
@@ -213,6 +212,21 @@ struct RootView: View {
 
     private func start() {
         store.start(settings: currentSettings)
+    }
+
+    private func applySuggestedPeerHost(_ host: String) {
+        let suggested = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !suggested.isEmpty else { return }
+
+        let current = peerHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shouldReplace = current.isEmpty
+            || current == "192.168.0.102"
+            || current == lastAutoAppliedPeerHost
+            || (current.hasPrefix("10.") && suggested.hasPrefix("192.168."))
+
+        guard shouldReplace else { return }
+        peerHost = suggested
+        lastAutoAppliedPeerHost = suggested
     }
 }
 

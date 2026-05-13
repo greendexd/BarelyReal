@@ -32,6 +32,7 @@ final class BarelyRealStore: ObservableObject {
     @Published private(set) var controlRunning = false
     @Published private(set) var remoteScreensStale = true
     @Published private(set) var discoveredPeers: [MdnsPeer] = []
+    @Published private(set) var suggestedPeerHost = ""
     @Published private(set) var localFingerprint = "unavailable"
     @Published private(set) var pinnedPeers: [PairingService.PinnedPeer] = []
     @Published var permissionRefreshToken = UUID()
@@ -49,10 +50,16 @@ final class BarelyRealStore: ObservableObject {
     private var keepAliveTimer: Timer?
     private let mdnsAdvertiser = MdnsAdvertiser()
     private let mdnsBrowser = MdnsBrowser()
+    private let lanPeerScanner = LanPeerScanner()
     private let deviceIdentity = DeviceIdentity()
     private let pairingService = PairingService()
     private var discoveryStarted = false
     private var lastSuggestedPeerHost: String?
+    private var currentControlPort = 24_800
+    private var mdnsRemotePeers: [MdnsPeer] = []
+    private var lanScanHosts: [String] = []
+    private var lanScanTimer: Timer?
+    private var lanScanInFlight = false
 
     init() {
         loadIdentityAndTrust()
@@ -180,14 +187,12 @@ final class BarelyRealStore: ObservableObject {
     }
 
     func resetBarelyRealPermissions() {
-        runTccutilReset(service: "Accessibility")
-        runTccutilReset(service: "ListenEvent")
+        stop()
+        resetTccService("Accessibility")
+        resetTccService("ListenEvent")
         refreshPermissions()
-        appendLog("Reset BarelyReal permissions. Enable Accessibility again; Input Monitoring is optional.")
-        openAccessibilitySettings()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.openInputMonitoringSettings()
-        }
+        appendLog("Reset BarelyReal permissions. Restarting and opening Accessibility.")
+        restartAppAndOpenAccessibility()
     }
 
     private func startReceiver(settings: ConnectionSettings) {
@@ -265,16 +270,7 @@ final class BarelyRealStore: ObservableObject {
         keepAliveTimer?.invalidate()
         startDiscovery(controlPort: settings.controlPort)
 
-        let session = DevControlSession()
-        session.onLog = { [weak self] message in
-            Task { @MainActor in self?.appendLog(message) }
-        }
-        session.onScreenAnnounce = { [weak self] announcement in
-            Task { @MainActor in self?.applyRemoteAnnouncement(announcement) }
-        }
-        session.onLayoutSync = { [weak self] message in
-            Task { @MainActor in self?.applyRemoteLayout(message) }
-        }
+        let session = configuredControlSession()
 
         do {
             try session.start(localPort: UInt16(settings.controlPort), peerHost: settings.peerHost, peerPort: UInt16(settings.controlPort))
@@ -291,7 +287,22 @@ final class BarelyRealStore: ObservableObject {
         }
     }
 
+    private func configuredControlSession() -> DevControlSession {
+        let session = DevControlSession()
+        session.onLog = { [weak self] message in
+            Task { @MainActor in self?.appendLog(message) }
+        }
+        session.onScreenAnnounce = { [weak self] announcement in
+            Task { @MainActor in self?.applyRemoteAnnouncement(announcement) }
+        }
+        session.onLayoutSync = { [weak self] message in
+            Task { @MainActor in self?.applyRemoteLayout(message) }
+        }
+        return session
+    }
+
     private func startDiscovery(controlPort: Int) {
+        currentControlPort = controlPort
         let deviceName = Host.current().localizedName ?? "Mac"
         mdnsAdvertiser.start(
             deviceName: deviceName,
@@ -305,15 +316,23 @@ final class BarelyRealStore: ObservableObject {
             }
         )
 
-        guard !discoveryStarted else { return }
-        discoveryStarted = true
-        mdnsBrowser.onLog = { [weak self] message in
-            Task { @MainActor in self?.appendLog(message) }
+        if !discoveryStarted {
+            discoveryStarted = true
+            mdnsBrowser.onLog = { [weak self] message in
+                Task { @MainActor in self?.appendLog(message) }
+            }
+            mdnsBrowser.onChange = { [weak self] peers in
+                Task { @MainActor in self?.applyDiscoveredPeers(peers) }
+            }
+            mdnsBrowser.start()
         }
-        mdnsBrowser.onChange = { [weak self] peers in
-            Task { @MainActor in self?.applyDiscoveredPeers(peers) }
+
+        if lanScanTimer == nil {
+            lanScanTimer = Timer.scheduledTimer(withTimeInterval: 18, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.runLanPeerScan() }
+            }
         }
-        mdnsBrowser.start()
+        runLanPeerScan()
     }
 
     func refreshDisplays() {
@@ -402,20 +421,104 @@ final class BarelyRealStore: ObservableObject {
     }
 
     private func applyDiscoveredPeers(_ peers: [MdnsPeer]) {
-        let remotePeers = peers.filter { peer in
+        mdnsRemotePeers = peers.filter { peer in
             peer.peerId != localPeerId
                 && (peer.peerId == remotePeerId || peer.os.localizedCaseInsensitiveContains("win"))
         }
-        discoveredPeers = remotePeers
+        rebuildDiscoveredPeers()
+    }
 
-        guard let peer = remotePeers.first(where: { !$0.stale }),
-              let host = peer.bestHost,
-              host != lastSuggestedPeerHost
+    private func runLanPeerScan() {
+        guard !lanScanInFlight else { return }
+        lanScanInFlight = true
+        let port = UInt16(clamping: currentControlPort)
+        lanPeerScanner.scan(controlPort: port) { [weak self] hosts in
+            Task { @MainActor in
+                guard let self else { return }
+                self.lanScanInFlight = false
+                if hosts != self.lanScanHosts {
+                    self.lanScanHosts = hosts
+                    if !hosts.isEmpty {
+                        self.appendLog("LAN scan found BarelyReal control on \(hosts.joined(separator: ", "))")
+                    }
+                    self.rebuildDiscoveredPeers()
+                }
+            }
+        }
+    }
+
+    private func rebuildDiscoveredPeers() {
+        var merged = mdnsRemotePeers
+        let knownHosts = Set(
+            merged.flatMap { peer in
+                ([peer.bestHost, peer.hostName] + peer.addresses.map(Optional.some))
+                    .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            }
+        )
+
+        let scannedPeers = lanScanHosts.compactMap { host -> MdnsPeer? in
+            let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !knownHosts.contains(normalized) else { return nil }
+            return MdnsPeer(
+                name: "BarelyReal peer",
+                os: "Windows",
+                version: "LAN scan",
+                publicKeyFingerprint: "",
+                peerId: remotePeerId,
+                hostName: nil,
+                addresses: [host],
+                port: currentControlPort,
+                stale: false
+            )
+        }
+
+        merged.append(contentsOf: scannedPeers)
+        discoveredPeers = merged.sorted { lhs, rhs in
+            if lhs.stale != rhs.stale { return !lhs.stale }
+            return (lhs.bestHost ?? lhs.name).localizedStandardCompare(rhs.bestHost ?? rhs.name) == .orderedAscending
+        }
+
+        guard let peer = discoveredPeers.first(where: { !$0.stale }),
+              let host = peer.bestHost
         else { return }
+        suggestPeerHost(host, source: peer.version == "LAN scan" ? "LAN scan" : "mDNS")
+    }
 
-        lastSuggestedPeerHost = host
-        appendLog("Discovered Windows peer at \(host)")
-        onSuggestedPeerHost?(host)
+    private func suggestPeerHost(_ host: String, source: String) {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != lastSuggestedPeerHost else { return }
+
+        lastSuggestedPeerHost = trimmed
+        suggestedPeerHost = trimmed
+        appendLog("Auto-detected Windows peer via \(source): \(trimmed)")
+        onSuggestedPeerHost?(trimmed)
+        startPassiveControlIfNeeded(peerHost: trimmed)
+    }
+
+    private func startPassiveControlIfNeeded(peerHost: String) {
+        guard !kmRunning, !clipboardRunning else { return }
+
+        controlSession?.close()
+        keepAliveTimer?.invalidate()
+
+        let session = configuredControlSession()
+        do {
+            try session.start(
+                localPort: UInt16(clamping: currentControlPort),
+                peerHost: peerHost,
+                peerPort: UInt16(clamping: currentControlPort)
+            )
+            controlSession = session
+            controlRunning = true
+            sendControlSnapshot()
+            keepAliveTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak session] _ in
+                session?.sendKeepAlive()
+            }
+            appendLog("Passive control ready for auto-detected peer \(peerHost):\(currentControlPort)")
+        } catch {
+            controlRunning = false
+            appendLog("Passive control start failed: \(error)")
+        }
     }
 
     private func notePeerTrustState(settings: ConnectionSettings) {
@@ -633,12 +736,44 @@ final class BarelyRealStore: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    private func runTccutilReset(service: String) {
+    private func resetTccService(_ service: String) {
+        runTccutilReset(service: service, bundleIdentifier: "local.barelyreal.mac")
+        runTccutilReset(service: service, bundleIdentifier: "com.barelyreal.mac")
+    }
+
+    private func runTccutilReset(service: String, bundleIdentifier: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-        process.arguments = ["reset", service, "local.barelyreal.mac"]
+        process.arguments = ["reset", service, bundleIdentifier]
         try? process.run()
         process.waitUntilExit()
+    }
+
+    private func restartAppAndOpenAccessibility() {
+        let bundleURL = Bundle.main.bundleURL
+        let installedURL = URL(fileURLWithPath: "/Applications/BarelyReal.app")
+        let appURL = bundleURL.pathExtension == "app" ? bundleURL : installedURL
+        let accessibilityURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        let script = """
+        sleep 0.45
+        if [ -d \(Self.shellQuote(appURL.path)) ]; then
+          open -n \(Self.shellQuote(appURL.path))
+        elif [ -d \(Self.shellQuote(installedURL.path)) ]; then
+          open -n \(Self.shellQuote(installedURL.path))
+        fi
+        sleep 0.35
+        open \(Self.shellQuote(accessibilityURL))
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", script]
+        try? process.run()
+        NSApp.terminate(nil)
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     private static let timeFormatter: DateFormatter = {

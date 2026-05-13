@@ -207,6 +207,7 @@ public partial class MainWindow : Window
         public string Key { get; init; } = string.Empty;
         public string PeerName { get; init; } = string.Empty;
         public string Host { get; init; } = string.Empty;
+        public ushort Port { get; init; }
         public string DisplayName { get; init; } = string.Empty;
         public string Fingerprint { get; init; } = string.Empty;
         public bool IsMacPeer { get; init; }
@@ -232,6 +233,7 @@ public partial class MainWindow : Window
                 Key = $"{peer.PeerId}|{host}|{peer.Port}|{peer.PublicKeyFingerprint}",
                 PeerName = peer.Name,
                 Host = host,
+                Port = peer.Port,
                 DisplayName = displayName,
                 Fingerprint = peer.PublicKeyFingerprint,
                 IsMacPeer = IsUsableMacPeer(peer)
@@ -485,17 +487,7 @@ public partial class MainWindow : Window
         if (!CanAutoFillMacHost())
             return;
 
-        _suppressMacHostChanged = true;
-        try
-        {
-            ClipboardPeerBox.Text = host;
-            SendMacHostBox.Text = host;
-            _autoFilledMacHost = host;
-        }
-        finally
-        {
-            _suppressMacHostChanged = false;
-        }
+        ApplyMacTarget(host, mac.Port);
 
         AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery filled Mac IP: {label}");
     }
@@ -514,6 +506,17 @@ public partial class MainWindow : Window
             .ThenBy(row => row.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        if (DiscoveryCountText is not null)
+        {
+            var freshCount = rows.Count;
+            var macCount = rows.Count(row => row.IsMacPeer);
+            DiscoveryCountText.Text = freshCount == 0
+                ? "Searching on LAN"
+                : macCount == 0
+                    ? $"{freshCount} peer(s) found, no Mac target yet"
+                    : $"{macCount} Mac peer(s) found on LAN";
+        }
+
         PairingPeerCombo.ItemsSource = rows;
         PairingPeerCombo.SelectedItem = previousKey is null
             ? rows.FirstOrDefault()
@@ -524,6 +527,32 @@ public partial class MainWindow : Window
     private void PairingPeerCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdatePairingPanel();
+    }
+
+    private void UseSelectedPeerButton_Click(object sender, RoutedEventArgs e)
+    {
+        var row = SelectedPairingPeer();
+        if (row is null)
+        {
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery has no peer selected.");
+            return;
+        }
+
+        if (!row.IsMacPeer)
+        {
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery selection is not a Mac peer: {row.DisplayName}.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(row.Host))
+        {
+            AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery selected {row.DisplayName}, but no IPv4 address is available yet.");
+            return;
+        }
+
+        ApplyMacTarget(row.Host, row.Port);
+        AppendLog($"[{DateTime.Now:HH:mm:ss}] Discovery selected Mac target: {row.DisplayName}.");
+        UpdateMacCommand();
     }
 
     private void TrustPeerButton_Click(object sender, RoutedEventArgs e)
@@ -615,6 +644,8 @@ public partial class MainWindow : Window
         if (UnpinPeerButton is not null)
             UnpinPeerButton.IsEnabled = hasUsableFingerprint
                 && (trusted || trustState == PairingService.TrustState.KeyChanged);
+        if (UseSelectedPeerButton is not null)
+            UseSelectedPeerButton.IsEnabled = hasPeer && row!.IsMacPeer && !string.IsNullOrWhiteSpace(row.Host);
     }
 
     private void NotePeerTrustState(string peerHost, string action)
@@ -731,6 +762,23 @@ public partial class MainWindow : Window
         return string.IsNullOrWhiteSpace(trimmed)
             || trimmed.Equals(DefaultMacHost, StringComparison.OrdinalIgnoreCase)
             || (_autoFilledMacHost is not null && trimmed.Equals(_autoFilledMacHost, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ApplyMacTarget(string host, ushort controlPort)
+    {
+        _suppressMacHostChanged = true;
+        try
+        {
+            ClipboardPeerBox.Text = host;
+            SendMacHostBox.Text = host;
+            if (controlPort != 0)
+                ControlPortBox.Text = controlPort.ToString();
+            _autoFilledMacHost = host;
+        }
+        finally
+        {
+            _suppressMacHostChanged = false;
+        }
     }
 
     private void SendControlSnapshot()
