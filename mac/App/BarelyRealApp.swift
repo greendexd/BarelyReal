@@ -8,7 +8,7 @@ struct BarelyRealApp: App {
     var body: some Scene {
         WindowGroup("BarelyReal") {
             ContentView(store: store)
-                .frame(minWidth: 880, minHeight: 600)
+                .frame(minWidth: 760, minHeight: 560)
         }
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {

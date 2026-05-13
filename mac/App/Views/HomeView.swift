@@ -47,7 +47,7 @@ struct HomeView: View {
                     errorCard(error)
                 }
             }
-            .padding(.horizontal, 34)
+            .padding(.horizontal, 26)
             .padding(.top, 34)
             .padding(.bottom, 40)
             .frame(maxWidth: 980, alignment: .leading)
@@ -57,35 +57,52 @@ struct HomeView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Handoff Center")
-                    .font(.system(size: 31, weight: .semibold))
-                    .foregroundStyle(ProductPalette.text)
-                Text("Seamless control, clipboard, and displays between your devices.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(ProductPalette.subtext)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                headerTitle
+                Spacer(minLength: 18)
+                healthPill
             }
 
-            Spacer()
-
-            HStack(spacing: 9) {
-                Circle()
-                    .fill(isRunning ? ProductPalette.green : ProductPalette.muted)
-                    .frame(width: 10, height: 10)
-                    .shadow(color: ProductPalette.green.opacity(isRunning ? 0.45 : 0), radius: 7)
-                Text("Connection health")
-                    .font(.callout.weight(.medium))
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(ProductPalette.subtext)
+            VStack(alignment: .leading, spacing: 14) {
+                headerTitle
+                healthPill
             }
-            .foregroundStyle(ProductPalette.text)
-            .padding(.horizontal, 15)
-            .padding(.vertical, 10)
-            .background(ProductPalette.cardElevated, in: Capsule())
-            .overlay(Capsule().stroke(ProductPalette.border, lineWidth: 1))
         }
+    }
+
+    private var headerTitle: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Handoff Center")
+                .font(.system(size: 31, weight: .semibold))
+                .foregroundStyle(ProductPalette.text)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+            Text("Seamless control, clipboard, and displays between your devices.")
+                .font(.system(size: 15))
+                .foregroundStyle(ProductPalette.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var healthPill: some View {
+        HStack(spacing: 9) {
+            Circle()
+                .fill(isRunning ? ProductPalette.green : ProductPalette.muted)
+                .frame(width: 10, height: 10)
+                .shadow(color: ProductPalette.green.opacity(isRunning ? 0.45 : 0), radius: 7)
+            Text("Connection health")
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(ProductPalette.subtext)
+        }
+        .foregroundStyle(ProductPalette.text)
+        .padding(.horizontal, 15)
+        .padding(.vertical, 10)
+        .background(ProductPalette.cardElevated, in: Capsule())
+        .overlay(Capsule().stroke(ProductPalette.border, lineWidth: 1))
     }
 
     private var modeSwitcher: some View {
@@ -137,46 +154,22 @@ struct HomeView: View {
     }
 
     private var handoffHero: some View {
-        HStack(spacing: 22) {
-            ZStack {
-                Circle()
-                    .fill(ProductPalette.green.opacity(handoffRunning ? 0.16 : 0.08))
-                    .frame(width: 84, height: 84)
-                Circle()
-                    .stroke(ProductPalette.green, lineWidth: 1.4)
-                    .frame(width: 58, height: 58)
-                Image(systemName: mode == .sendToWindows ? "paperplane.fill" : "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 30, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .rotationEffect(.degrees(mode == .sendToWindows ? 0 : 0))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 22) {
+                handoffIcon
+                handoffCopy
+                Spacer(minLength: 12)
+                handoffActionButton
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 12) {
-                    Text(handoffRunning ? "Handoff active" : "Handoff ready")
-                        .font(.system(size: 27, weight: .semibold))
-                        .foregroundStyle(ProductPalette.text)
-                    statusPill(text: handoffRunning ? "Connected" : "Idle", active: handoffRunning)
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 16) {
+                    handoffIcon
+                    handoffCopy
                 }
-                Text(mode == .sendToWindows ? displayPeer : "Windows can control this Mac")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(ProductPalette.text.opacity(0.82))
-                Text(handoffRunning ? "You can control the target device." : "Press Start Handoff, then cross the configured screen edge.")
-                    .font(.callout)
-                    .foregroundStyle(ProductPalette.subtext)
+                handoffActionButton
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
-
-            Spacer()
-
-            Button(action: handoffRunning ? onStop : onStart) {
-                Label(handoffRunning ? "Stop Handoff" : "Start Handoff",
-                      systemImage: handoffRunning ? "stop.fill" : "play.fill")
-                    .font(.callout.weight(.semibold))
-                    .frame(minWidth: 142)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .tint(handoffRunning ? ProductPalette.red : ProductPalette.blue)
         }
         .padding(26)
         .background {
@@ -202,8 +195,70 @@ struct HomeView: View {
         )
     }
 
+    private var handoffIcon: some View {
+        ZStack {
+            Circle()
+                .fill(ProductPalette.green.opacity(handoffRunning ? 0.16 : 0.08))
+                .frame(width: 84, height: 84)
+            Circle()
+                .stroke(ProductPalette.green, lineWidth: 1.4)
+                .frame(width: 58, height: 58)
+            Image(systemName: mode == .sendToWindows ? "paperplane.fill" : "antenna.radiowaves.left.and.right")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 84, height: 84)
+        .fixedSize()
+    }
+
+    private var handoffCopy: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    handoffTitle
+                    statusPill(text: handoffRunning ? "Connected" : "Idle", active: handoffRunning)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    handoffTitle
+                    statusPill(text: handoffRunning ? "Connected" : "Idle", active: handoffRunning)
+                }
+            }
+            Text(mode == .sendToWindows ? displayPeer : "Windows can control this Mac")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(ProductPalette.text.opacity(0.82))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+            Text(handoffRunning ? "You can control the target device." : "Press Start Handoff, then cross the configured screen edge.")
+                .font(.callout)
+                .foregroundStyle(ProductPalette.subtext)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var handoffTitle: some View {
+        Text(handoffRunning ? "Handoff active" : "Handoff ready")
+            .font(.system(size: 27, weight: .semibold))
+            .foregroundStyle(ProductPalette.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.78)
+    }
+
+    private var handoffActionButton: some View {
+        Button(action: handoffRunning ? onStop : onStart) {
+            Label(handoffRunning ? "Stop Handoff" : "Start Handoff",
+                  systemImage: handoffRunning ? "stop.fill" : "play.fill")
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+                .frame(minWidth: 142)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .tint(handoffRunning ? ProductPalette.red : ProductPalette.blue)
+    }
+
     private var metricsRow: some View {
-        HStack(spacing: 14) {
+        LazyVGrid(columns: metricColumns, alignment: .leading, spacing: 14) {
             ProductMetricCard(
                 icon: "keyboard",
                 title: "Keyboard & Mouse",
@@ -228,6 +283,10 @@ struct HomeView: View {
         }
     }
 
+    private var metricColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 14)]
+    }
+
     private var targetDeviceCard: some View {
         ProductCard {
             VStack(alignment: .leading, spacing: 16) {
@@ -235,25 +294,17 @@ struct HomeView: View {
 
                 Divider().overlay(ProductPalette.hairline)
 
-                HStack(spacing: 12) {
-                    Image(systemName: "globe")
-                        .font(.title3)
-                        .foregroundStyle(ProductPalette.subtext)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Peer address")
-                            .font(.caption)
-                            .foregroundStyle(ProductPalette.subtext)
-                        TextField("192.168.0.102", text: $peerHost)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 18, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(ProductPalette.text)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) {
+                        peerAddressField
+                        Spacer(minLength: 12)
+                        pingButton
                     }
-                    Spacer()
-                    Button("Ping", systemImage: "wifi") {
-                        store.refreshDisplays()
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        peerAddressField
+                        pingButton
                     }
-                    .controlSize(.small)
                 }
 
                 Divider().overlay(ProductPalette.hairline)
@@ -262,9 +313,8 @@ struct HomeView: View {
                     Text("Channels & ports")
                         .font(.caption)
                         .foregroundStyle(ProductPalette.subtext)
-                    HStack(spacing: 22) {
+                    LazyVGrid(columns: portColumns, alignment: .leading, spacing: 14) {
                         portDetail(icon: "antenna.radiowaves.left.and.right", title: "Keyboard & Mouse", value: "UDP \(kmPort)", tint: ProductPalette.green)
-                        verticalDivider
                         portDetail(icon: "clipboard", title: "Clipboard", value: "TCP \(clipboardPort)", tint: ProductPalette.blue)
                     }
                 }
@@ -272,31 +322,73 @@ struct HomeView: View {
         }
     }
 
+    private var peerAddressField: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "globe")
+                .font(.title3)
+                .foregroundStyle(ProductPalette.subtext)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Peer address")
+                    .font(.caption)
+                    .foregroundStyle(ProductPalette.subtext)
+                TextField("192.168.0.102", text: $peerHost)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(ProductPalette.text)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var pingButton: some View {
+        Button("Ping", systemImage: "wifi") {
+            store.refreshDisplays()
+        }
+        .controlSize(.small)
+    }
+
+    private var portColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 210, maximum: 320), spacing: 14)]
+    }
+
     private var diagnosticsCard: some View {
         ProductCard {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    SectionHeader(systemImage: "waveform.path.ecg", title: "Diagnostics", subtitle: "Quick system check and connection diagnostics.")
-                    Spacer()
-                    Button("Run quick check", systemImage: "stethoscope") {
-                        store.refreshPermissions()
-                        store.refreshDisplays()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 14) {
+                        SectionHeader(systemImage: "waveform.path.ecg", title: "Diagnostics", subtitle: "Quick system check and connection diagnostics.")
+                        Spacer(minLength: 14)
+                        diagnosticsButton
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(systemImage: "waveform.path.ecg", title: "Diagnostics", subtitle: "Quick system check and connection diagnostics.")
+                        diagnosticsButton
                     }
                 }
 
                 Divider().overlay(ProductPalette.hairline)
 
-                HStack(spacing: 0) {
+                LazyVGrid(columns: diagnosticColumns, alignment: .leading, spacing: 14) {
                     diagnosticItem("Latency", value: store.kmRunning ? "0.6 ms" : "—")
-                    verticalDivider.padding(.horizontal, 24)
                     diagnosticItem("Packet loss", value: store.kmRunning ? "0%" : "—")
-                    verticalDivider.padding(.horizontal, 24)
                     diagnosticItem("Clipboard", value: store.clipboardRunning ? "Linked" : "Idle")
-                    verticalDivider.padding(.horizontal, 24)
                     diagnosticItem("Stability", value: store.kmRunning ? "Excellent" : "Ready")
                 }
             }
         }
+    }
+
+    private var diagnosticsButton: some View {
+        Button("Run quick check", systemImage: "stethoscope") {
+            store.refreshPermissions()
+            store.refreshDisplays()
+        }
+    }
+
+    private var diagnosticColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 148, maximum: 240), spacing: 14)]
     }
 
     private func statusPill(text: String, active: Bool) -> some View {
@@ -397,6 +489,7 @@ private struct ProductMetricCard: View {
                     Text(title)
                         .font(.caption)
                         .foregroundStyle(ProductPalette.subtext)
+                        .lineLimit(1)
                     HStack(spacing: 7) {
                         Circle()
                             .fill(tint)
@@ -409,6 +502,7 @@ private struct ProductMetricCard: View {
                     Text(caption)
                         .font(.caption)
                         .foregroundStyle(ProductPalette.subtext)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }

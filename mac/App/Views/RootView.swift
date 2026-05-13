@@ -57,20 +57,24 @@ struct RootView: View {
     @State private var selection: AppSection = .home
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: 232)
-                .background(ProductPalette.sidebar)
+        GeometryReader { proxy in
+            let sidebarWidth: CGFloat = proxy.size.width < 940 ? 190 : 232
 
-            Rectangle()
-                .fill(ProductPalette.hairline)
-                .frame(width: 1)
+            HStack(spacing: 0) {
+                sidebar
+                    .frame(width: sidebarWidth)
+                    .background(ProductPalette.sidebar)
 
-            detailView
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(ProductPalette.background)
+                Rectangle()
+                    .fill(ProductPalette.hairline)
+                    .frame(width: 1)
+
+                detailView
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ProductPalette.background)
+            }
         }
-        .frame(minWidth: 1120, minHeight: 760)
+        .frame(minWidth: 760, minHeight: 560)
         .background(ProductPalette.background)
         .onAppear {
             store.setLockOnDisconnect(lockOnDisconnect)
@@ -181,6 +185,7 @@ struct RootView: View {
                 Text("BarelyReal")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(ProductPalette.text)
+                    .lineLimit(1)
                 HStack(spacing: 7) {
                     Circle()
                         .fill(store.kmRunning || store.clipboardRunning ? ProductPalette.green : ProductPalette.muted)
@@ -188,6 +193,7 @@ struct RootView: View {
                     Text(store.kmRunning || store.clipboardRunning ? "Connected" : "Ready")
                         .font(.callout)
                         .foregroundStyle(ProductPalette.subtext)
+                        .lineLimit(1)
                 }
             }
         }
@@ -227,9 +233,11 @@ private struct SidebarButton: View {
                     Text(section.title)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(ProductPalette.text)
+                        .lineLimit(1)
                     Text(section.detail)
                         .font(.caption)
                         .foregroundStyle(ProductPalette.subtext)
+                        .lineLimit(1)
                 }
                 Spacer()
             }
@@ -259,6 +267,7 @@ private struct SidebarSessionCard: View {
                     .foregroundStyle(store.kmRunning ? ProductPalette.green : ProductPalette.muted)
                 Text(store.kmRunning ? "Session active" : "Session idle")
                     .font(.caption.weight(.medium))
+                    .lineLimit(1)
                 Spacer()
                 Image(systemName: "chevron.down")
                     .font(.caption2.weight(.semibold))
@@ -270,6 +279,7 @@ private struct SidebarSessionCard: View {
                 Text(store.clipboardRunning ? "Clipboard linked" : "Clipboard idle")
                     .font(.caption)
                     .foregroundStyle(ProductPalette.subtext)
+                    .lineLimit(1)
             }
         }
         .foregroundStyle(ProductPalette.text)

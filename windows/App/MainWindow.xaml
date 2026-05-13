@@ -6,7 +6,7 @@
         Icon="Assets/BarelyReal.ico"
         Width="1100"
         Height="760"
-        MinWidth="940"
+        MinWidth="720"
         MinHeight="640"
         Background="#0E1117"
         FontFamily="Segoe UI Variable Display, Segoe UI"
@@ -56,6 +56,7 @@
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
             <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
 
         <!-- Default button (subtle) -->
@@ -437,64 +438,54 @@
 
                         <!-- Status hero -->
                         <Border Style="{StaticResource Card}" Padding="24" CornerRadius="8" Background="{StaticResource HeroBrush}" BorderBrush="{StaticResource HeroBorderBrush}">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <DockPanel LastChildFill="True">
+                                    <Border Width="64" Height="64" CornerRadius="8" Background="#173F2A" BorderBrush="#2F6F4B" BorderThickness="1" Margin="0,0,18,12" DockPanel.Dock="Left">
+                                        <TextBlock x:Name="HeroIcon" Text="●" FontSize="30" Foreground="{StaticResource SuccessBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
 
-                                <Border Grid.Column="0" Width="64" Height="64" CornerRadius="8" Background="#173F2A" BorderBrush="#2F6F4B" BorderThickness="1" Margin="0,0,18,0">
-                                    <TextBlock x:Name="HeroIcon" Text="●" FontSize="30" Foreground="{StaticResource SuccessBrush}"
-                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                </Border>
+                                    <StackPanel MinWidth="220" VerticalAlignment="Center">
+                                        <TextBlock Text="HANDOFF ACTIVE" Foreground="#8DE8AD" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,5" />
+                                        <TextBlock x:Name="HeroTitle" Text="Ready for Mac handoff" FontSize="24" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="HeroSubtitle"
+                                                   Text="Keyboard, mouse, and clipboard routing are staged for this Windows device."
+                                                   Foreground="#B9D7C4"
+                                                   Margin="0,4,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </DockPanel>
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="HANDOFF ACTIVE" Foreground="#8DE8AD" FontSize="10" FontWeight="SemiBold" Margin="0,0,0,5" />
-                                    <TextBlock x:Name="HeroTitle" Text="Ready for Mac handoff" FontSize="24" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="HeroSubtitle"
-                                               Text="Keyboard, mouse, and clipboard routing are staged for this Windows device."
-                                               Foreground="#B9D7C4"
-                                               Margin="0,4,0,0" TextWrapping="Wrap" />
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button x:Name="StartButton" Content="Start Handoff" Style="{StaticResource PrimaryButton}" Click="StartButton_Click" Margin="0,0,8,0" MinWidth="116" />
-                                    <Button x:Name="StopButton" Content="Stop Handoff" Style="{StaticResource DangerButton}" Click="StopButton_Click" MinWidth="116" />
-                                </StackPanel>
-                            </Grid>
+                                <WrapPanel Margin="0,12,0,0">
+                                    <Button x:Name="StartButton" Content="Start Handoff" Style="{StaticResource PrimaryButton}" Click="StartButton_Click" Margin="0,0,8,8" MinWidth="116" />
+                                    <Button x:Name="StopButton" Content="Stop Handoff" Style="{StaticResource DangerButton}" Click="StopButton_Click" MinWidth="116" Margin="0,0,0,8" />
+                                </WrapPanel>
+                            </StackPanel>
                         </Border>
 
                         <!-- Quick stats -->
-                        <Grid Margin="0,14,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Border Grid.Column="0" Style="{StaticResource StatBadge}" Margin="0,0,7,0">
+                        <WrapPanel Margin="0,14,0,0">
+                            <Border Style="{StaticResource StatBadge}" Margin="0,0,8,8" MinWidth="190">
                                 <StackPanel>
                                     <TextBlock Text="Keyboard &amp; Mouse" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                     <TextBlock x:Name="FramesText" Text="0" FontSize="21" FontWeight="SemiBold" Margin="0,5,0,0" />
                                     <TextBlock Text="Low latency" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="1" Style="{StaticResource StatBadge}" Margin="7,0,7,0">
+                            <Border Style="{StaticResource StatBadge}" Margin="0,0,8,8" MinWidth="190">
                                 <StackPanel>
                                     <TextBlock Text="Clipboard" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                     <TextBlock x:Name="ClipboardText" Text="0" FontSize="21" FontWeight="SemiBold" Margin="0,5,0,0" />
                                     <TextBlock Text="Real-time" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="2" Style="{StaticResource StatBadge}" Margin="7,0,0,0">
+                            <Border Style="{StaticResource StatBadge}" Margin="0,0,0,8" MinWidth="190">
                                 <StackPanel>
                                     <TextBlock Text="Displays" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                     <TextBlock x:Name="LinkText" Text="—" FontSize="21" FontWeight="SemiBold" Margin="0,5,0,0" />
                                     <TextBlock Text="Active" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                 </StackPanel>
                             </Border>
-                        </Grid>
+                        </WrapPanel>
 
                         <!-- Connection card (per mode) -->
                         <Border x:Name="ReceiveCard" Style="{StaticResource Card}" Margin="0,14,0,0">
@@ -508,15 +499,8 @@
                                         <TextBlock Text="MAC -> WINDOWS" Foreground="{StaticResource DimBrush}" FontSize="10" FontWeight="SemiBold" />
                                     </Border>
                                 </DockPanel>
-                                <Grid Margin="0,12,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <WrapPanel Margin="0,12,0,0">
+                                    <StackPanel Width="150" Margin="0,0,12,12">
                                         <TextBlock Text="Control channel" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="TCP " VerticalAlignment="Center" />
@@ -524,7 +508,7 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <StackPanel Width="150" Margin="0,0,12,12">
                                         <TextBlock Text="Keyboard &amp; mouse" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="UDP " VerticalAlignment="Center" />
@@ -532,7 +516,7 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="2" Margin="8,0,8,0">
+                                    <StackPanel Width="150" Margin="0,0,12,12">
                                         <TextBlock Text="Clipboard" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                             <TextBlock Text="TCP " VerticalAlignment="Center" />
@@ -540,11 +524,11 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                    <StackPanel Width="180" Margin="0,0,0,12">
                                         <TextBlock Text="Target Mac" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="ClipboardPeerBox" Text="192.168.0.101" Margin="0,4,0,0" />
                                     </StackPanel>
-                                </Grid>
+                                </WrapPanel>
                                 <Border Margin="0,12,0,0" Padding="12,9" CornerRadius="8" Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrushFaint}" BorderThickness="1">
                                     <TextBlock x:Name="DiscoveryStatusText"
                                                Text="Discovery starting..."
@@ -570,41 +554,30 @@
 
                                 <controls:LayoutCanvas x:Name="LayoutDesigner" Margin="0,0,0,16" />
 
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="2*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <WrapPanel>
+                                    <StackPanel Width="280" Margin="0,0,12,12">
                                         <TextBlock Text="Mac IP" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="SendMacHostBox" Margin="0,4,0,0" Text="192.168.0.101" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1" Margin="8,0,0,0">
+                                    <StackPanel Width="140" Margin="0,0,0,12">
                                         <TextBlock Text="Mac KM port" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="SendMacKmPortBox" Margin="0,4,0,0" Text="24801" />
                                     </StackPanel>
-                                </Grid>
+                                </WrapPanel>
 
                                 <Border Margin="0,16,0,0" Padding="14" CornerRadius="8" Background="#211D14" BorderBrush="#4A3C1D" BorderThickness="1">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Wake target" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                        <TextBox Grid.Column="1" x:Name="WolMacBox" Text="" FontFamily="Cascadia Mono, Consolas" Margin="0,0,8,0">
+                                    <WrapPanel>
+                                        <TextBlock Text="Wake target" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" Margin="0,0,12,8" />
+                                        <TextBox x:Name="WolMacBox" Text="" FontFamily="Cascadia Mono, Consolas" Width="190" Margin="0,0,8,8">
                                             <TextBox.Style>
                                                 <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
                                                     <Setter Property="ToolTip" Value="MAC address e.g. AA:BB:CC:DD:EE:FF" />
                                                 </Style>
                                             </TextBox.Style>
                                         </TextBox>
-                                        <TextBox Grid.Column="2" x:Name="WolBroadcastBox" Text="192.168.0.255" FontFamily="Cascadia Mono, Consolas" Margin="0,0,8,0" />
-                                        <Button Grid.Column="3" x:Name="WolButton" Content="Wake" Style="{StaticResource PrimaryButton}" MinWidth="74" Click="WolButton_Click" />
-                                    </Grid>
+                                        <TextBox x:Name="WolBroadcastBox" Text="192.168.0.255" FontFamily="Cascadia Mono, Consolas" Width="160" Margin="0,0,8,8" />
+                                        <Button x:Name="WolButton" Content="Wake" Style="{StaticResource PrimaryButton}" MinWidth="74" Click="WolButton_Click" Margin="0,0,0,8" />
+                                    </WrapPanel>
                                 </Border>
                             </StackPanel>
                         </Border>
@@ -624,30 +597,24 @@
                                     <Button DockPanel.Dock="Right" Content="Run quick check" Padding="14,5" MinHeight="30" />
                                 </DockPanel>
 
-                                <Grid Margin="0,8,0,0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0">
+                                <WrapPanel Margin="0,8,0,0">
+                                    <StackPanel Width="130" Margin="0,0,12,10">
                                         <TextBlock Text="Latency" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                         <TextBlock Text="0.6 ms" FontWeight="SemiBold" FontSize="15" Margin="0,4,0,0" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1">
+                                    <StackPanel Width="130" Margin="0,0,12,10">
                                         <TextBlock Text="Packet loss" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                         <TextBlock Text="0%" FontWeight="SemiBold" FontSize="15" Margin="0,4,0,0" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2">
+                                    <StackPanel Width="130" Margin="0,0,12,10">
                                         <TextBlock Text="Clipboard" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                         <TextBlock Text="Linked" FontWeight="SemiBold" FontSize="15" Margin="0,4,0,0" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="3">
+                                    <StackPanel Width="130" Margin="0,0,0,10">
                                         <TextBlock Text="Stability" Foreground="{StaticResource MutedBrush}" FontSize="12" />
                                         <TextBlock Text="Excellent" FontWeight="SemiBold" FontSize="15" Margin="0,4,0,0" />
                                     </StackPanel>
-                                </Grid>
+                                </WrapPanel>
 
                                 <StackPanel Visibility="Collapsed">
                                     <TextBlock x:Name="TrustStatusText" Text="No peer selected" />
@@ -680,33 +647,27 @@
                                     <Button DockPanel.Dock="Right" Content="Refresh" Click="RefreshButton_Click" Padding="14,4" MinHeight="30" />
                                 </DockPanel>
 
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="1.4*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="0.9*" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <WrapPanel>
+                                    <StackPanel Width="240" Margin="0,0,12,12">
                                         <TextBlock Text="Windows IPv4" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <ComboBox x:Name="IpComboBox" Margin="0,4,0,0" SelectionChanged="CommandInput_Changed" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <StackPanel Width="120" Margin="0,0,12,12">
                                         <TextBlock Text="Width" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="WidthBox" Margin="0,4,0,0" TextChanged="CommandInput_Changed" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="2" Margin="8,0,8,0">
+                                    <StackPanel Width="120" Margin="0,0,12,12">
                                         <TextBlock Text="Height" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <TextBox x:Name="HeightBox" Margin="0,4,0,0" TextChanged="CommandInput_Changed" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="3" Margin="8,0,0,0">
+                                    <StackPanel Width="110" Margin="0,0,0,12">
                                         <TextBlock Text="Side" Foreground="{StaticResource MutedBrush}" FontSize="11" />
                                         <ComboBox x:Name="SideComboBox" Margin="0,4,0,0" SelectionChanged="CommandInput_Changed">
                                             <ComboBoxItem Content="left" IsSelected="True" />
                                             <ComboBoxItem Content="right" />
                                         </ComboBox>
                                     </StackPanel>
-                                </Grid>
+                                </WrapPanel>
 
                                 <TextBox x:Name="CommandBox"
                                          MinHeight="62"

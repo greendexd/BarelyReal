@@ -45,59 +45,76 @@ func drawIcon(size: Int) -> Data {
     }
 
     let canvas = CGRect(x: 0, y: 0, width: CGFloat(size), height: CGFloat(size))
-    c(0x0B1220).setFill()
-    roundedRect(canvas.insetBy(dx: 28 * scale, dy: 28 * scale), radius: 220 * scale).fill()
+    let base = roundedRect(canvas.insetBy(dx: 86 * scale, dy: 86 * scale), radius: 180 * scale)
 
-    let glow = NSGradient(colors: [c(0x0EA5E9, 0.75), c(0x2563EB, 0.18), c(0x0B1220, 0.0)])!
-    glow.draw(in: roundedRect(canvas.insetBy(dx: 60 * scale, dy: 60 * scale), radius: 190 * scale), angle: 45)
+    let shadow = NSShadow()
+    shadow.shadowColor = c(0x2563EB, 0.42)
+    shadow.shadowBlurRadius = 72 * scale
+    shadow.shadowOffset = CGSize(width: 0, height: -18 * scale)
 
-    let left = CGRect(x: 162 * scale, y: 548 * scale, width: 284 * scale, height: 184 * scale)
-    let right = CGRect(x: 578 * scale, y: 294 * scale, width: 284 * scale, height: 184 * scale)
-    for rect in [left, right] {
-        c(0x0F2747, 0.96).setFill()
-        roundedRect(rect, radius: 34 * scale).fill()
-        c(0x38BDF8, 0.92).setStroke()
-        let stroke = roundedRect(rect, radius: 34 * scale)
-        stroke.lineWidth = 16 * scale
-        stroke.stroke()
+    NSGraphicsContext.saveGraphicsState()
+    shadow.set()
+    c(0x2563EB, 0.70).setFill()
+    base.fill()
+    NSGraphicsContext.restoreGraphicsState()
+
+    NSGraphicsContext.saveGraphicsState()
+    base.addClip()
+    NSGradient(colors: [c(0x6D5DFB), c(0x4F46E5), c(0x2563EB)])!
+        .draw(in: base.bounds, angle: -42)
+    NSGraphicsContext.restoreGraphicsState()
+
+    NSGraphicsContext.saveGraphicsState()
+    base.addClip()
+    NSGradient(colors: [c(0xA5B4FC, 0.50), c(0xFFFFFF, 0.05), c(0x111827, 0.0)])!
+        .draw(in: CGRect(x: 110 * scale, y: 600 * scale, width: 560 * scale, height: 360 * scale), angle: -28)
+    NSGraphicsContext.restoreGraphicsState()
+
+    let highlight = roundedRect(base.bounds.insetBy(dx: 26 * scale, dy: 26 * scale), radius: 148 * scale)
+    c(0xFFFFFF, 0.14).setStroke()
+    highlight.lineWidth = 10 * scale
+    highlight.stroke()
+
+    func drawMonitor(_ rect: CGRect, radius: CGFloat, strokeWidth: CGFloat, alpha: CGFloat) {
+        let screen = roundedRect(rect, radius: radius * scale)
+
+        NSGraphicsContext.saveGraphicsState()
+        let monitorShadow = NSShadow()
+        monitorShadow.shadowColor = c(0x1E1B4B, 0.28)
+        monitorShadow.shadowBlurRadius = 18 * scale
+        monitorShadow.shadowOffset = CGSize(width: 0, height: -8 * scale)
+        monitorShadow.set()
+        c(0xFFFFFF, 0.10 * alpha).setFill()
+        screen.fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        c(0xFFFFFF, 0.95 * alpha).setStroke()
+        screen.lineWidth = strokeWidth * scale
+        screen.stroke()
 
         let stand = NSBezierPath()
-        stand.move(to: CGPoint(x: rect.midX, y: rect.minY))
-        stand.line(to: CGPoint(x: rect.midX, y: rect.minY - 42 * scale))
-        stand.move(to: CGPoint(x: rect.midX - 60 * scale, y: rect.minY - 42 * scale))
-        stand.line(to: CGPoint(x: rect.midX + 60 * scale, y: rect.minY - 42 * scale))
-        c(0x38BDF8, 0.78).setStroke()
-        stand.lineWidth = 18 * scale
+        stand.move(to: CGPoint(x: rect.midX, y: rect.minY - 4 * scale))
+        stand.line(to: CGPoint(x: rect.midX, y: rect.minY - 58 * scale))
+        stand.move(to: CGPoint(x: rect.midX - 72 * scale, y: rect.minY - 58 * scale))
+        stand.line(to: CGPoint(x: rect.midX + 72 * scale, y: rect.minY - 58 * scale))
+        stand.lineWidth = strokeWidth * 0.82 * scale
         stand.lineCapStyle = .round
+        stand.lineJoinStyle = .round
         stand.stroke()
     }
 
-    let bridge = NSBezierPath()
-    bridge.move(to: CGPoint(x: left.maxX + 28 * scale, y: left.midY - 20 * scale))
-    bridge.curve(
-        to: CGPoint(x: right.minX - 28 * scale, y: right.midY + 22 * scale),
-        controlPoint1: CGPoint(x: 500 * scale, y: 640 * scale),
-        controlPoint2: CGPoint(x: 524 * scale, y: 410 * scale)
+    drawMonitor(
+        CGRect(x: 484 * scale, y: 342 * scale, width: 322 * scale, height: 248 * scale),
+        radius: 38,
+        strokeWidth: 30,
+        alpha: 0.78
     )
-    c(0x22C55E, 0.90).setStroke()
-    bridge.lineWidth = 26 * scale
-    bridge.lineCapStyle = .round
-    bridge.stroke()
-
-    let cursor = NSBezierPath()
-    cursor.move(to: CGPoint(x: 430 * scale, y: 426 * scale))
-    cursor.line(to: CGPoint(x: 430 * scale, y: 204 * scale))
-    cursor.line(to: CGPoint(x: 585 * scale, y: 350 * scale))
-    cursor.line(to: CGPoint(x: 505 * scale, y: 364 * scale))
-    cursor.line(to: CGPoint(x: 548 * scale, y: 462 * scale))
-    cursor.line(to: CGPoint(x: 494 * scale, y: 486 * scale))
-    cursor.line(to: CGPoint(x: 454 * scale, y: 390 * scale))
-    cursor.close()
-    c(0xF8FAFC).setFill()
-    cursor.fill()
-    c(0x020617, 0.38).setStroke()
-    cursor.lineWidth = 12 * scale
-    cursor.stroke()
+    drawMonitor(
+        CGRect(x: 218 * scale, y: 432 * scale, width: 422 * scale, height: 304 * scale),
+        radius: 44,
+        strokeWidth: 34,
+        alpha: 1
+    )
 
     NSGraphicsContext.restoreGraphicsState()
     return rep.representation(using: .png, properties: [:])!
