@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS Swift
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: mac
+        run: swift build
+
+      - name: Test
+        working-directory: mac
+        run: swift run BarelyRealTests
+
+      - name: UDP smoke
+        working-directory: mac
+        run: swift run BarelyRealKmSmoke udp-loopback
+
+  windows:
+    name: Windows .NET
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify
+        shell: pwsh
+        run: ./windows/scripts/verify.ps1
