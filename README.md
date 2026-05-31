@@ -2,6 +2,8 @@
 
 Cross-platform KM (keyboard/mouse) and clipboard sharing between macOS and Windows over Wi-Fi/LAN or USB-C.
 
+![BarelyReal system preview](docs/assets/barelyreal-system-preview.svg)
+
 A modern alternative to Synergy / Barrier / Universal Control with a focus on:
 - Low latency (UDP for KM events, TCP+TLS for control/clipboard/files).
 - Native integration on both platforms (Swift + AppKit/SwiftUI on macOS, C#/.NET on Windows; current dev UI is WPF).
@@ -22,8 +24,20 @@ See:
 - [protocol/BRP-1.0.md](protocol/BRP-1.0.md) — wire-format specification.
 - [docs/architecture.md](docs/architecture.md) — system design.
 - [docs/security.md](docs/security.md) — threat model & pairing.
+- [docs/roadmap-v0.2-secure-pairing.md](docs/roadmap-v0.2-secure-pairing.md) — secure pairing roadmap.
 - [docs/production-readiness.md](docs/production-readiness.md) — roadmap from dev bridge to shippable product.
 - [docs/release-checklist.md](docs/release-checklist.md) — release gates before sharing builds with users.
+- [CHANGELOG.md](CHANGELOG.md) — release history.
+
+## Downloads
+
+The latest public alpha release includes macOS and Windows x64 archives:
+
+- [BarelyReal releases](https://github.com/greendexd/BarelyReal/releases)
+- [v0.1.0-alpha.1](https://github.com/greendexd/BarelyReal/releases/tag/v0.1.0-alpha.1)
+
+Current downloads are unsigned alpha builds. macOS Gatekeeper and Windows
+SmartScreen may warn until Developer ID / Windows signing is in place.
 
 ## Status
 

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">BarelyReal cross-platform control preview</title>
+  <desc id="desc">Diagram showing macOS and Windows devices connected through BarelyReal protocol channels.</desc>
+  <rect width="1280" height="640" fill="#0f172a"/>
+  <rect x="48" y="48" width="1184" height="544" rx="28" fill="#111827" stroke="#334155" stroke-width="2"/>
+  <text x="92" y="116" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="700">BarelyReal</text>
+  <text x="92" y="158" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="20">macOS + Windows keyboard, mouse, clipboard, and file sharing over LAN</text>
+
+  <rect x="92" y="220" width="390" height="230" rx="18" fill="#172033" stroke="#475569" stroke-width="2"/>
+  <circle cx="132" cy="260" r="12" fill="#ef4444"/>
+  <circle cx="166" cy="260" r="12" fill="#f59e0b"/>
+  <circle cx="200" cy="260" r="12" fill="#22c55e"/>
+  <text x="128" y="326" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">macOS App</text>
+  <text x="128" y="368" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="20">Swift + AppKit/SwiftUI</text>
+  <text x="128" y="408" fill="#93c5fd" font-family="Inter, Arial, sans-serif" font-size="18">Accessibility capture, layout editor, diagnostics</text>
+
+  <rect x="798" y="220" width="390" height="230" rx="18" fill="#172033" stroke="#475569" stroke-width="2"/>
+  <rect x="842" y="255" width="300" height="158" rx="10" fill="#0b1220" stroke="#64748b"/>
+  <rect x="842" y="255" width="300" height="34" rx="10" fill="#1e293b"/>
+  <text x="872" y="326" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Windows App</text>
+  <text x="872" y="368" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="20">C#/.NET 8 WPF</text>
+  <text x="872" y="408" fill="#86efac" font-family="Inter, Arial, sans-serif" font-size="18">Hooks, injection, firewall helper, smoke tools</text>
+
+  <path d="M500 286 C590 220 690 220 780 286" fill="none" stroke="#38bdf8" stroke-width="8" stroke-linecap="round"/>
+  <path d="M780 286 L746 268 L752 310 Z" fill="#38bdf8"/>
+  <path d="M780 384 C690 450 590 450 500 384" fill="none" stroke="#34d399" stroke-width="8" stroke-linecap="round"/>
+  <path d="M500 384 L534 402 L528 360 Z" fill="#34d399"/>
+
+  <rect x="520" y="292" width="240" height="88" rx="16" fill="#0b1220" stroke="#475569"/>
+  <text x="552" y="328" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">BRP channels</text>
+  <text x="552" y="358" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="16">KM UDP + control / clipboard / files</text>
+
+  <rect x="92" y="494" width="1096" height="54" rx="16" fill="#0b1220" stroke="#334155"/>
+  <text x="124" y="528" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="18">v0.2 focus:</text>
+  <text x="236" y="528" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="18">TLS pairing, peer pinning, replay protection, signed release path, real Windows runtime verification</text>
+</svg>
