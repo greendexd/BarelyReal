@@ -1,7 +1,5 @@
 # BarelyReal
 
-[![CI](https://github.com/greendexd/BarelyReal/actions/workflows/ci.yml/badge.svg)](https://github.com/greendexd/BarelyReal/actions/workflows/ci.yml)
-
 Cross-platform KM (keyboard/mouse) and clipboard sharing between macOS and Windows over Wi-Fi/LAN or USB-C.
 
 A modern alternative to Synergy / Barrier / Universal Control with a focus on:
