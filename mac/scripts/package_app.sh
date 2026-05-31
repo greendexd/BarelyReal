@@ -9,7 +9,7 @@ SHA_PATH="$ZIP_PATH.sha256"
 
 rm -f "$ZIP_PATH" "$SHA_PATH"
 cd "$(dirname "$APP_PATH")"
-ditto -c -k --sequesterRsrc --keepParent "$(basename "$APP_PATH")" "$ZIP_PATH"
+ditto -c -k --norsrc --noextattr --noqtn --noacl --keepParent "$(basename "$APP_PATH")" "$ZIP_PATH"
 shasum -a 256 "$ZIP_PATH" > "$SHA_PATH"
 
 echo "$ZIP_PATH"

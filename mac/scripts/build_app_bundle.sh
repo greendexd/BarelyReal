@@ -3,8 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-APP_DIR="$MAC_DIR/dist/BarelyReal.app"
 CONFIGURATION="${CONFIGURATION:-release}"
+BUILD_ROOT="${BARELYREAL_APP_BUILD_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/barelyreal-app.XXXXXX")}"
+APP_DIR="$BUILD_ROOT/BarelyReal.app"
 
 if [[ "$CONFIGURATION" != "debug" && "$CONFIGURATION" != "release" ]]; then
   echo "CONFIGURATION must be 'debug' or 'release'." >&2
@@ -72,6 +73,8 @@ PLIST
 
 printf "APPL????" > "$APP_DIR/Contents/PkgInfo"
 
+xattr -cr "$APP_DIR"
 codesign --force --deep --sign - "$APP_DIR" >/dev/null
+codesign --verify --deep --strict "$APP_DIR" >/dev/null
 
 echo "$APP_DIR"

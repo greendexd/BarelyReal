@@ -129,9 +129,9 @@ Install the macOS app locally:
 ./mac/scripts/install_app.sh
 ```
 
-This builds `mac/dist/BarelyReal.app`, signs it ad-hoc for local development, then installs it into
-`/Applications/BarelyReal.app` when possible, or `~/Applications/BarelyReal.app` when `/Applications`
-is not writable.
+This builds a temporary `BarelyReal.app`, signs it ad-hoc for local development, then installs it
+into `/Applications/BarelyReal.app` when possible, or `~/Applications/BarelyReal.app` when
+`/Applications` is not writable.
 
 Create a zip artifact that can be moved to another Mac:
 
