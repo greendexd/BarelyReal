@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest a focused improvement for BarelyReal
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user workflow or reliability gap should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful version of the change.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - macOS app
+        - Windows app
+        - Protocol
+        - Pairing/security
+        - Clipboard/files
+        - KM input
+        - Build/release
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Tradeoffs
+      description: Note security, privacy, compatibility, or UX tradeoffs.

@@ -29,6 +29,14 @@ See:
 
 🚧 Early development. MVP scope and roadmap in [docs/architecture.md](docs/architecture.md).
 
+BarelyReal is public for source review, protocol discussion, and early testing.
+It is not production-ready yet. Current development builds still contain
+explicit dev-mode transports and pairing scaffolding; do not use them on
+untrusted networks or with sensitive clipboard/input data. See
+[docs/security.md](docs/security.md) and
+[docs/production-readiness.md](docs/production-readiness.md) before running
+the app outside a controlled local setup.
+
 Implemented so far:
 - BRP frame codecs on macOS + Windows with shared byte fixtures.
 - KM payload helpers on macOS + Windows.
@@ -165,4 +173,4 @@ on Windows because they target `net8.0-windows` / `Microsoft.WindowsDesktop.App`
 
 ## License
 
-TBD.
+BarelyReal is available under the [MIT License](LICENSE).

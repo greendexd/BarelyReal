@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible BarelyReal bug
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include keystrokes, clipboard contents, private keys, tokens, PINs, or personal files.
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Paste the commit SHA or build version you tested.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Windows
+        - Both
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest steps that reproduce the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Checks run
+      description: List commands or manual tests you ran.
+      placeholder: |
+        cd mac && swift build
+        cd mac && swift run BarelyRealTests
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or diagnostics
+      description: Attach only sanitized logs. Remove clipboard/input/file contents and secrets.
